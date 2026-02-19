@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "remote-canvas-mcp",
+  "account_id": "36940733b1e2c5d479253bce004597f3",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MCP_OBJECT",
+        "class_name": "CanvasLmsMcp",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CanvasLmsMcp"],
+    },
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "0e6d0c730e10403b90c44bc81fc266ab",
+    },
+  ],
+  // Secrets (set via `npx wrangler secret put`):
+  //   GITHUB_CLIENT_ID          — required
+  //   GITHUB_CLIENT_SECRET      — required
+  //   COOKIE_ENCRYPTION_KEY     — required (used for cookie signing + credential encryption)
+  // Per-user Canvas credentials are collected via MCP elicitation and stored encrypted in KV.
+}
