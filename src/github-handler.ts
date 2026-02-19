@@ -90,11 +90,10 @@ app.post("/authorize", async (c) => {
       { expirationTtl: 600 },
     );
 
-    const headers = new Headers();
-    headers.append("Set-Cookie", approvedClientCookie);
-    headers.append("Set-Cookie", sessionBindingCookie);
-
-    return redirectToGitHub(c.req.raw, c.env.GITHUB_CLIENT_ID, stateToken, Object.fromEntries(headers));
+    return redirectToGitHub(c.req.raw, c.env.GITHUB_CLIENT_ID, stateToken, [
+      approvedClientCookie,
+      sessionBindingCookie,
+    ]);
   } catch (error: unknown) {
     if (error instanceof OAuthError) return error.toResponse();
     return c.text(`Internal server error: ${error instanceof Error ? error.message : String(error)}`, 500);
@@ -105,21 +104,21 @@ function redirectToGitHub(
   request: Request,
   githubClientId: string,
   stateToken: string,
-  extraHeaders: Record<string, string> = {},
+  cookies: string[] = [],
 ): Response {
-  return new Response(null, {
-    status: 302,
-    headers: {
-      ...extraHeaders,
-      location: getUpstreamAuthorizeUrl({
-        client_id: githubClientId,
-        redirect_uri: new URL("/callback", request.url).href,
-        scope: "read:user",
-        state: stateToken,
-        upstream_url: "https://github.com/login/oauth/authorize",
-      }),
-    },
+  const headers = new Headers({
+    location: getUpstreamAuthorizeUrl({
+      client_id: githubClientId,
+      redirect_uri: new URL("/callback", request.url).href,
+      scope: "read:user",
+      state: stateToken,
+      upstream_url: "https://github.com/login/oauth/authorize",
+    }),
   });
+  for (const cookie of cookies) {
+    headers.append("Set-Cookie", cookie);
+  }
+  return new Response(null, { status: 302, headers });
 }
 
 // ---------------------------------------------------------------------------
