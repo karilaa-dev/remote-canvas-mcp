@@ -65,13 +65,6 @@ export async function storeCanvasCredentials(
   await kv.put(`${KV_PREFIX}${userId}`, JSON.stringify(stored));
 }
 
-export async function deleteCanvasCredentials(
-  kv: KVNamespace,
-  userId: string,
-): Promise<void> {
-  await kv.delete(`${KV_PREFIX}${userId}`);
-}
-
 // ---------------------------------------------------------------------------
 // Encryption helpers
 // ---------------------------------------------------------------------------

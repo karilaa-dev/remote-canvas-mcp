@@ -1,14 +1,8 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
 import { CanvasClient } from "./canvas-client.js";
-import {
-  type CanvasCredentials,
-  deleteCanvasCredentials,
-  getCanvasCredentials,
-  storeCanvasCredentials,
-} from "./credential-store.js";
+import { getCanvasCredentials } from "./credential-store.js";
 import { AuthHandler } from "./auth-handler.js";
 import { registerAccountTools } from "./tools/accounts.js";
 import { registerAssignmentTools } from "./tools/assignments.js";
@@ -25,17 +19,6 @@ import { registerRubricTools } from "./tools/rubrics.js";
 import { registerSubmissionTools } from "./tools/submissions.js";
 import { registerUserTools } from "./tools/users.js";
 import type { Props } from "./utils.js";
-
-type ToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-};
-
-function textResult(text: string, isError = false): ToolResult {
-  return isError
-    ? { content: [{ type: "text", text }], isError: true }
-    : { content: [{ type: "text", text }] };
-}
 
 const canvasToolRegistrations = [
   registerHealthTools,
@@ -66,69 +49,12 @@ export class CanvasLmsMcp extends McpAgent<Env, Record<string, never>, Props> {
       ? await getCanvasCredentials(this.env.OAUTH_KV, login, this.env.COOKIE_ENCRYPTION_KEY)
       : null;
 
-    this.registerCredentialTools(credentials !== null);
-
     if (credentials) {
       const client = new CanvasClient(credentials.canvasApiToken, credentials.canvasDomain);
       for (const register of canvasToolRegistrations) {
         register(this.server, client);
       }
     }
-  }
-
-  private registerCredentialTools(hasCredentials: boolean) {
-    this.server.registerTool(
-      "canvas_setup_credentials",
-      {
-        description: hasCredentials
-          ? "Update your Canvas LMS API credentials. After updating, the server will reinitialize with the new credentials."
-          : "Set up your Canvas LMS credentials. You must call this tool before any Canvas tools become available. Provide your Canvas API token and domain.",
-        inputSchema: {
-          canvas_api_token: z.string().describe("Your Canvas API access token"),
-          canvas_domain: z.string().describe("Your Canvas instance domain (e.g. school.instructure.com)"),
-        },
-      },
-      async ({ canvas_api_token, canvas_domain }) => {
-        const testClient = new CanvasClient(canvas_api_token, canvas_domain);
-        try {
-          await testClient.healthCheck();
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return textResult(`Invalid credentials — Canvas API returned an error: ${message}`, true);
-        }
-
-        const login = this.props?.login;
-        if (login) {
-          await storeCanvasCredentials(
-            this.env.OAUTH_KV,
-            login,
-            { canvasApiToken: canvas_api_token, canvasDomain: canvas_domain },
-            this.env.COOKIE_ENCRYPTION_KEY,
-          );
-        }
-
-        await this.reinitializeServer();
-
-        return textResult(`Canvas credentials saved and verified. Connected to ${canvas_domain}. All Canvas tools are now available.`);
-      },
-    );
-
-    this.server.registerTool(
-      "canvas_clear_credentials",
-      {
-        description: "Remove your stored Canvas LMS credentials from the server.",
-      },
-      async () => {
-        const login = this.props?.login;
-        if (!login) {
-          return textResult("No user identity available to clear credentials for.", true);
-        }
-
-        await deleteCanvasCredentials(this.env.OAUTH_KV, login);
-        await this.reinitializeServer();
-        return textResult("Canvas credentials removed. Use canvas_setup_credentials to connect again.");
-      },
-    );
   }
 }
 
