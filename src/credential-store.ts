@@ -62,7 +62,9 @@ export async function storeCanvasCredentials(
     updatedAt: new Date().toISOString(),
   };
 
-  await kv.put(`${KV_PREFIX}${userId}`, JSON.stringify(stored));
+  await kv.put(`${KV_PREFIX}${userId}`, JSON.stringify(stored), {
+    expirationTtl: 15_552_000, // 6 months
+  });
 }
 
 // ---------------------------------------------------------------------------
