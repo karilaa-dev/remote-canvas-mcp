@@ -9,7 +9,7 @@ import {
   getCanvasCredentials,
   storeCanvasCredentials,
 } from "./credential-store.js";
-import { GitHubHandler } from "./github-handler.js";
+import { AuthHandler } from "./auth-handler.js";
 import { registerAccountTools } from "./tools/accounts.js";
 import { registerAssignmentTools } from "./tools/assignments.js";
 import { registerCalendarTools } from "./tools/calendar.js";
@@ -26,12 +26,15 @@ import { registerSubmissionTools } from "./tools/submissions.js";
 import { registerUserTools } from "./tools/users.js";
 import type { Props } from "./utils.js";
 
-type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
+type ToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+};
 
 function textResult(text: string, isError = false): ToolResult {
-  const result: ToolResult = { content: [{ type: "text" as const, text }] };
-  if (isError) result.isError = true;
-  return result;
+  return isError
+    ? { content: [{ type: "text", text }], isError: true }
+    : { content: [{ type: "text", text }] };
 }
 
 const canvasToolRegistrations = [
@@ -59,13 +62,11 @@ export class CanvasLmsMcp extends McpAgent<Env, Record<string, never>, Props> {
 
   async init() {
     const login = this.props?.login;
+    const credentials = login
+      ? await getCanvasCredentials(this.env.OAUTH_KV, login, this.env.COOKIE_ENCRYPTION_KEY)
+      : null;
 
-    let credentials: CanvasCredentials | null = null;
-    if (login) {
-      credentials = await getCanvasCredentials(this.env.OAUTH_KV, login, this.env.COOKIE_ENCRYPTION_KEY);
-    }
-
-    this.registerCredentialTools(!!credentials);
+    this.registerCredentialTools(credentials !== null);
 
     if (credentials) {
       const client = new CanvasClient(credentials.canvasApiToken, credentials.canvasDomain);
@@ -134,7 +135,8 @@ export class CanvasLmsMcp extends McpAgent<Env, Record<string, never>, Props> {
 export default new OAuthProvider({
   apiHandler: CanvasLmsMcp.serve("/mcp"),
   apiRoute: "/mcp",
-  defaultHandler: GitHubHandler as any,
+  // Hono's fetch signature is compatible but structurally different from ExportedHandler
+  defaultHandler: AuthHandler as any,
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/token",
   clientRegistrationEndpoint: "/register",

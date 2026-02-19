@@ -30,32 +30,26 @@ interface StoredCredentials {
 
 export async function getCanvasCredentials(
   kv: KVNamespace,
-  githubLogin: string,
+  userId: string,
   encryptionKey: string,
 ): Promise<CanvasCredentials | null> {
-  const raw = await kv.get(`${KV_PREFIX}${githubLogin}`);
+  const raw = await kv.get(`${KV_PREFIX}${userId}`);
   if (!raw) return null;
 
-  let stored: StoredCredentials;
   try {
-    stored = JSON.parse(raw) as StoredCredentials;
-  } catch {
-    return null;
-  }
-
-  try {
+    const stored = JSON.parse(raw) as StoredCredentials;
     const key = await deriveKey(encryptionKey);
     const canvasApiToken = await decrypt(stored.encryptedToken, key);
     return { canvasApiToken, canvasDomain: stored.canvasDomain };
   } catch {
-    // Decryption failed (key rotated, corrupted data, etc.) — treat as missing.
+    // Parse or decryption failed (corrupted data, key rotated, etc.)
     return null;
   }
 }
 
 export async function storeCanvasCredentials(
   kv: KVNamespace,
-  githubLogin: string,
+  userId: string,
   credentials: CanvasCredentials,
   encryptionKey: string,
 ): Promise<void> {
@@ -68,14 +62,14 @@ export async function storeCanvasCredentials(
     updatedAt: new Date().toISOString(),
   };
 
-  await kv.put(`${KV_PREFIX}${githubLogin}`, JSON.stringify(stored));
+  await kv.put(`${KV_PREFIX}${userId}`, JSON.stringify(stored));
 }
 
 export async function deleteCanvasCredentials(
   kv: KVNamespace,
-  githubLogin: string,
+  userId: string,
 ): Promise<void> {
-  await kv.delete(`${KV_PREFIX}${githubLogin}`);
+  await kv.delete(`${KV_PREFIX}${userId}`);
 }
 
 // ---------------------------------------------------------------------------

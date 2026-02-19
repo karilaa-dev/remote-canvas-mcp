@@ -26,8 +26,6 @@
     },
   ],
   // Secrets (set via `npx wrangler secret put`):
-  //   GITHUB_CLIENT_ID          — required
-  //   GITHUB_CLIENT_SECRET      — required
   //   COOKIE_ENCRYPTION_KEY     — required (used for cookie signing + credential encryption)
-  // Per-user Canvas credentials are collected via MCP elicitation and stored encrypted in KV.
+  // Per-user Canvas credentials are collected via the approval form and stored encrypted in KV.
 }

@@ -9,13 +9,12 @@ Based on [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms), port
 - **Remote MCP** — runs on Cloudflare Workers, no local install needed
 - **Multi-user** — each user provides their own Canvas credentials during the OAuth flow
 - **Secure credential storage** — Canvas API tokens are encrypted at rest with AES-256-GCM
-- **GitHub OAuth** — users authenticate via GitHub; credentials are tied to their GitHub identity
+- **No external auth required** — users enter Canvas credentials directly, no third-party sign-in needed
 - **50+ Canvas tools** — courses, assignments, submissions, modules, pages, discussions, quizzes, files, calendar, conversations, rubrics, and more
 
 ## Prerequisites
 
 - A [Cloudflare](https://cloudflare.com) account
-- A [GitHub OAuth App](https://github.com/settings/developers) (for user authentication)
 - A Canvas LMS API token (each user provides their own)
 - Node.js and npm
 
@@ -29,14 +28,7 @@ cd remote-canvas-mcp
 npm install
 ```
 
-### 2. Create a GitHub OAuth App
-
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Click **New OAuth App**
-3. Set the **Authorization callback URL** to `https://<your-worker>.workers.dev/callback`
-4. Note the **Client ID** and **Client Secret**
-
-### 3. Create a KV namespace
+### 2. Create a KV namespace
 
 ```bash
 npx wrangler kv namespace create OAUTH_KV
@@ -44,21 +36,19 @@ npx wrangler kv namespace create OAUTH_KV
 
 Update the `id` in `wrangler.jsonc` under `kv_namespaces` with the returned namespace ID.
 
-### 4. Update `wrangler.jsonc`
+### 3. Update `wrangler.jsonc`
 
 Set your `account_id` in the config file (find it in the Cloudflare dashboard).
 
-### 5. Set secrets
+### 4. Set secrets
 
 ```bash
-npx wrangler secret put GITHUB_CLIENT_ID
-npx wrangler secret put GITHUB_CLIENT_SECRET
 npx wrangler secret put COOKIE_ENCRYPTION_KEY
 ```
 
 `COOKIE_ENCRYPTION_KEY` can be any random string (e.g. `openssl rand -hex 16`). It is used for cookie signing and credential encryption.
 
-### 6. Deploy
+### 5. Deploy
 
 ```bash
 npm run deploy
@@ -72,7 +62,7 @@ Your server will be available at `https://<your-worker>.workers.dev/mcp`.
 2. Go to **Settings > Integrations > Add MCP Server**
 3. Enter your server URL: `https://<your-worker>.workers.dev/mcp`
 4. An approval page will open — enter your **Canvas domain** (e.g. `school.instructure.com`) and **Canvas API token**
-5. Click **Approve**, then sign in with GitHub
+5. Click **Approve**
 6. Done — all Canvas tools are now available in your conversation
 
 ### Generating a Canvas API token
@@ -114,9 +104,7 @@ Additionally, `canvas_setup_credentials` and `canvas_clear_credentials` are alwa
 User connects MCP server in Claude
   → GET /authorize → Approval page with Canvas credential fields
   → User enters Canvas token + domain, clicks Approve
-  → POST /authorize → Credentials stored temporarily in KV, redirect to GitHub OAuth
-  → GitHub OAuth → User signs in
-  → GET /callback → Credentials encrypted (AES-256-GCM) and stored per-user in KV
+  → POST /authorize → Credentials encrypted (AES-256-GCM) and stored per-user in KV
   → MCP connects → Server loads credentials from KV → All Canvas tools available
 ```
 
@@ -124,7 +112,7 @@ User connects MCP server in Claude
 
 ```bash
 cp .dev.vars.example .dev.vars
-# Fill in GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, COOKIE_ENCRYPTION_KEY
+# Fill in COOKIE_ENCRYPTION_KEY
 npm run dev
 ```
 

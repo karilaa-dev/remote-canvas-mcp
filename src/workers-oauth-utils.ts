@@ -1,4 +1,4 @@
-import type { AuthRequest, ClientInfo } from "@cloudflare/workers-oauth-provider";
+import type { ClientInfo } from "@cloudflare/workers-oauth-provider";
 
 // ---------------------------------------------------------------------------
 // Shared constants and helpers
@@ -8,25 +8,22 @@ const encoder = new TextEncoder();
 
 const COOKIE_NAMES = {
   csrf: "__Host-CSRF_TOKEN",
-  consentedState: "__Host-CONSENTED_STATE",
   approvedClients: "__Host-APPROVED_CLIENTS",
 } as const;
+
+const THIRTY_DAYS_IN_SECONDS = 2592000;
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function sha256Hex(input: string): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(input));
-  return bytesToHex(new Uint8Array(hashBuffer));
-}
-
 function getCookieValue(request: Request, cookieName: string): string | null {
   const cookieHeader = request.headers.get("Cookie");
   if (!cookieHeader) return null;
-  const match = cookieHeader.split(";").find((c) => c.trimStart().startsWith(`${cookieName}=`));
-  if (!match) return null;
-  return match.trimStart().substring(cookieName.length + 1);
+  const prefix = `${cookieName}=`;
+  const cookie = cookieHeader.split(";").find((c) => c.trimStart().startsWith(prefix));
+  if (!cookie) return null;
+  return cookie.trimStart().substring(prefix.length);
 }
 
 function sanitizeText(text: string): string {
@@ -82,19 +79,6 @@ export class OAuthError extends Error {
 // Public result interfaces
 // ---------------------------------------------------------------------------
 
-export interface OAuthStateResult {
-  stateToken: string;
-}
-
-export interface ValidateStateResult {
-  oauthReqInfo: AuthRequest;
-  clearCookie: string;
-}
-
-export interface BindStateResult {
-  setCookie: string;
-}
-
 export interface CSRFProtectionResult {
   token: string;
   setCookie: string;
@@ -125,66 +109,11 @@ export function validateCSRFToken(formData: FormData, request: Request): void {
 }
 
 // ---------------------------------------------------------------------------
-// OAuth state management
-// ---------------------------------------------------------------------------
-
-export async function createOAuthState(
-  oauthReqInfo: AuthRequest,
-  kv: KVNamespace,
-  stateTTL = 600,
-): Promise<OAuthStateResult> {
-  const stateToken = crypto.randomUUID();
-  await kv.put(`oauth:state:${stateToken}`, JSON.stringify(oauthReqInfo), { expirationTtl: stateTTL });
-  return { stateToken };
-}
-
-export async function bindStateToSession(stateToken: string): Promise<BindStateResult> {
-  const hashHex = await sha256Hex(stateToken);
-  const setCookie = `${COOKIE_NAMES.consentedState}=${hashHex}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`;
-  return { setCookie };
-}
-
-export async function validateOAuthState(request: Request, kv: KVNamespace): Promise<ValidateStateResult> {
-  const url = new URL(request.url);
-  const stateFromQuery = url.searchParams.get("state");
-  if (!stateFromQuery) {
-    throw new OAuthError("invalid_request", "Missing state parameter", 400);
-  }
-
-  const storedDataJson = await kv.get(`oauth:state:${stateFromQuery}`);
-  if (!storedDataJson) {
-    throw new OAuthError("invalid_request", "Invalid or expired state", 400);
-  }
-
-  const consentedStateHash = getCookieValue(request, COOKIE_NAMES.consentedState);
-  if (!consentedStateHash) {
-    throw new OAuthError("invalid_request", "Missing session binding cookie - authorization flow must be restarted", 400);
-  }
-
-  const stateHash = await sha256Hex(stateFromQuery);
-  if (stateHash !== consentedStateHash) {
-    throw new OAuthError("invalid_request", "State token does not match session - possible CSRF attack detected", 400);
-  }
-
-  let oauthReqInfo: AuthRequest;
-  try {
-    oauthReqInfo = JSON.parse(storedDataJson) as AuthRequest;
-  } catch {
-    throw new OAuthError("server_error", "Invalid state data", 500);
-  }
-
-  await kv.delete(`oauth:state:${stateFromQuery}`);
-  const clearCookie = `${COOKIE_NAMES.consentedState}=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0`;
-  return { oauthReqInfo, clearCookie };
-}
-
-// ---------------------------------------------------------------------------
 // Client approval cookie
 // ---------------------------------------------------------------------------
 
 export async function addApprovedClient(request: Request, clientId: string, cookieSecret: string): Promise<string> {
-  const THIRTY_DAYS_IN_SECONDS = 2592000;
-  const existingClients = (await getApprovedClientsFromCookie(request, cookieSecret)) || [];
+  const existingClients = (await getApprovedClientsFromCookie(request, cookieSecret)) ?? [];
   const updatedClients = Array.from(new Set([...existingClients, clientId]));
   const payload = JSON.stringify(updatedClients);
   const signature = await signData(payload, cookieSecret);
@@ -240,7 +169,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 <div class="precard"><div class="header">${logoUrl ? `<img src="${logoUrl}" alt="${serverName}" class="logo">` : ""}<h1 class="title"><strong>${serverName}</strong></h1></div>${serverDescription ? `<p>${serverDescription}</p>` : ""}</div>
 <div class="card"><h2 class="alert"><strong>${clientName}</strong> is requesting access</h2>
 ${clientUri ? `<p>Website: <a href="${clientUri}" target="_blank">${clientUri}</a></p>` : ""}
-<p>This MCP Client is requesting to be authorized on ${serverName}. You will be redirected to sign in with GitHub after providing your Canvas credentials.</p>
+<p>This MCP Client is requesting to be authorized on ${serverName}. Your Canvas credentials will be stored securely.</p>
 <form method="post" action="${new URL(request.url).pathname}">
 <input type="hidden" name="state" value="${encodedState}">
 <input type="hidden" name="csrf_token" value="${csrfToken}">
