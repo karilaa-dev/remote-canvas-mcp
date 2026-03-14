@@ -422,7 +422,19 @@ function buildApiMethods(): ApiMethod[] {
     {
       name: "getUserGrades",
       signature: "async getUserGrades()",
-      body: `return this.request<unknown>("GET", "/users/self/grades");`,
+      body: `const courses = await this.listCourses() as Array<{ id: number }>;
+    const allGrades: unknown[] = [];
+    for (const course of courses) {
+      try {
+        const enrollments = await this.request<unknown[]>("GET", \`/courses/\${course.id}/enrollments\`, {
+          params: { user_id: "self", include: ["grades"] },
+        });
+        allGrades.push({ course_id: course.id, enrollments });
+      } catch {
+        // Skip courses where enrollment lookup fails
+      }
+    }
+    return allGrades;`,
     },
     // Modules
     {
