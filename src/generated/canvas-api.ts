@@ -10,8 +10,8 @@ export function installApiMethods(Client: typeof CanvasClient): void {
     try {
       const user = await this.getUserProfile() as { id: number; name: string };
       return { status: "ok" as const, timestamp: new Date().toISOString(), user: { id: user.id, name: user.name } };
-    } catch {
-      return { status: "error" as const, timestamp: new Date().toISOString() };
+    } catch (error) {
+      return { status: "error" as const, timestamp: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) };
     }
   };
 

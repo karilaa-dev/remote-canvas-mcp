@@ -6,6 +6,7 @@
  */
 
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 const UPSTREAM_BASE =
@@ -19,7 +20,10 @@ const OUT_DIR = path.resolve(__dirname, "../src/generated");
 
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Failed to fetch ${url}: HTTP ${res.status}${body ? ` - ${body.substring(0, 200)}` : ""}`);
+  }
   return res.text();
 }
 
@@ -59,9 +63,18 @@ function parseRawTools(source: string): ToolDef[] {
   const arrayStart = source.indexOf("[", eqIdx);
   let depth = 0;
   let arrayEnd = -1;
+  let inString = false;
+  let stringChar = "";
   for (let i = arrayStart; i < source.length; i++) {
-    if (source[i] === "[") depth++;
-    else if (source[i] === "]") {
+    const ch = source[i];
+    if (inString) {
+      if (ch === "\\" ) { i++; continue; }
+      if (ch === stringChar) inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { inString = true; stringChar = ch; continue; }
+    if (ch === "[") depth++;
+    else if (ch === "]") {
       depth--;
       if (depth === 0) {
         arrayEnd = i + 1;
@@ -74,8 +87,10 @@ function parseRawTools(source: string): ToolDef[] {
   let arrayText = source.slice(arrayStart, arrayEnd);
 
   // Convert from TS object literal syntax to valid JSON:
-  // 1. Strip TS line comments (but not inside strings)
-  arrayText = arrayText.replace(/\/\/.*$/gm, "");
+  // 1. Strip TS line comments (only outside of string literals)
+  arrayText = arrayText.replace(/"(?:[^"\\]|\\.)*"|\/\/.*$/gm, (match) =>
+    match.startsWith('"') ? match : ""
+  );
   // 2. Wrap unquoted keys in quotes
   arrayText = arrayText.replace(
     /([{,]\s*)(\w+)\s*:/g,
@@ -87,9 +102,9 @@ function parseRawTools(source: string): ToolDef[] {
   try {
     return JSON.parse(arrayText) as ToolDef[];
   } catch (e) {
-    // Write debug output
-    fs.writeFileSync(path.join(OUT_DIR, "_debug_raw_tools.json"), arrayText);
-    throw new Error(`Failed to parse RAW_TOOLS as JSON: ${e}`);
+    const debugPath = path.join(os.tmpdir(), "_debug_raw_tools.json");
+    fs.writeFileSync(debugPath, arrayText);
+    throw new Error(`Failed to parse RAW_TOOLS as JSON (debug written to ${debugPath}): ${e}`);
   }
 }
 
@@ -142,9 +157,8 @@ function generateTypes(upstreamTypes: string): string {
   // Remove `/** API Response types */` if empty
   out = out.replace(/\/\*\*\s*\n\s*\* API Response types\s*\n\s*\*\/\s*\n/g, "");
 
-  // Replace `any` with `unknown`
-  out = out.replace(/:\s*any\b/g, ": unknown");
-  out = out.replace(/<any>/g, "<unknown>");
+  // Replace `any` with `unknown` in all type positions
+  out = out.replace(/\bany\b/g, "unknown");
 
   // Strip branded ID type references in other interfaces
   out = out.replace(/\bCourseId\b/g, "number");
@@ -187,8 +201,8 @@ function buildApiMethods(): ApiMethod[] {
       body: `try {
       const user = await this.getUserProfile() as { id: number; name: string };
       return { status: "ok" as const, timestamp: new Date().toISOString(), user: { id: user.id, name: user.name } };
-    } catch {
-      return { status: "error" as const, timestamp: new Date().toISOString() };
+    } catch (error) {
+      return { status: "error" as const, timestamp: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) };
     }`,
     },
     // Courses
@@ -815,6 +829,7 @@ function generateToolRegistration(tools: ToolDef[]): string {
     `import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";`,
     `import { z } from "zod";`,
     `import type { CanvasClient } from "../canvas-client.js";`,
+    `import { CanvasAPIError } from "../types.js";`,
     ``,
     `type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };`,
     ``,
@@ -823,7 +838,15 @@ function generateToolRegistration(tools: ToolDef[]): string {
     `}`,
     ``,
     `function fail(error: unknown): ToolResult {`,
-    `  return { content: [{ type: "text", text: \`Error: \${error instanceof Error ? error.message : String(error)}\` }], isError: true };`,
+    `  let text: string;`,
+    `  if (error instanceof CanvasAPIError) {`,
+    `    text = \`Canvas API Error (HTTP \${error.statusCode}): \${error.message}\`;`,
+    `  } else if (error instanceof Error) {`,
+    `    text = \`Error: \${error.message}\`;`,
+    `  } else {`,
+    `    text = \`Error: \${String(error)}\`;`,
+    `  }`,
+    `  return { content: [{ type: "text", text }], isError: true };`,
     `}`,
     ``,
     `export function registerAllTools(server: McpServer, client: CanvasClient): void {`,
@@ -909,14 +932,17 @@ async function main() {
   // Ensure output dir exists
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  fs.writeFileSync(path.join(OUT_DIR, "types.ts"), typesOut);
-  fs.writeFileSync(path.join(OUT_DIR, "canvas-api.ts"), apiOut);
-  fs.writeFileSync(path.join(OUT_DIR, "register-tools.ts"), toolsOut);
-
-  // Clean up debug file if it exists
-  try {
-    fs.unlinkSync(path.join(OUT_DIR, "_debug_raw_tools.json"));
-  } catch {}
+  // Write all files — if any write fails, report what succeeded
+  const filesToWrite = [
+    ["types.ts", typesOut],
+    ["canvas-api.ts", apiOut],
+    ["register-tools.ts", toolsOut],
+  ] as const;
+  const written: string[] = [];
+  for (const [name, content] of filesToWrite) {
+    fs.writeFileSync(path.join(OUT_DIR, name), content);
+    written.push(name);
+  }
 
   console.log(`\nGenerated ${tools.length} tools into src/generated/`);
   console.log("  - types.ts");

@@ -3,6 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { CanvasClient } from "../canvas-client.js";
+import { CanvasAPIError } from "../types.js";
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 
@@ -11,7 +12,15 @@ function ok(data: unknown): ToolResult {
 }
 
 function fail(error: unknown): ToolResult {
-  return { content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+  let text: string;
+  if (error instanceof CanvasAPIError) {
+    text = `Canvas API Error (HTTP ${error.statusCode}): ${error.message}`;
+  } else if (error instanceof Error) {
+    text = `Error: ${error.message}`;
+  } else {
+    text = `Error: ${String(error)}`;
+  }
+  return { content: [{ type: "text", text }], isError: true };
 }
 
 export function registerAllTools(server: McpServer, client: CanvasClient): void {

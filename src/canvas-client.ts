@@ -99,7 +99,24 @@ export class CanvasClient {
           "Content-Type": "application/json",
         },
       });
-      const nextData = await nextResponse.json();
+
+      if (!nextResponse.ok) {
+        throw new CanvasAPIError(
+          `Pagination failed (HTTP ${nextResponse.status})`,
+          nextResponse.status
+        );
+      }
+
+      let nextData: unknown;
+      try {
+        nextData = await nextResponse.json();
+      } catch (e) {
+        throw new CanvasAPIError(
+          `Failed to parse paginated response: ${e instanceof Error ? e.message : String(e)}`,
+          0
+        );
+      }
+
       if (Array.isArray(nextData)) {
         allData.push(...nextData);
       }

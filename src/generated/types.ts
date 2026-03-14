@@ -703,7 +703,7 @@ export interface CanvasAccountReport {
   created_at: string;
   started_at?: string;
   ended_at?: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   progress: number;
   current_line?: number;
 }
@@ -711,7 +711,7 @@ export interface CanvasAccountReport {
 export interface CreateReportArgs {
   account_id: number;
   report: string;
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
 }
 
 export interface ListAccountCoursesArgs {
