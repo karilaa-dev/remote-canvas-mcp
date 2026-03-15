@@ -1030,7 +1030,7 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
       inputSchema: {
         account_id: z.number().describe("ID of the account"),
         report: z.string().describe("Type of report to generate"),
-        parameters: z.record(z.unknown()).describe("Report parameters").optional(),
+        parameters: z.record(z.string(), z.unknown()).describe("Report parameters").optional(),
       },
     },
     async (args) => {
