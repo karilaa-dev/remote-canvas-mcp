@@ -10,6 +10,8 @@ Based on [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms), port
 - **Multi-user** — each user provides their own Canvas credentials during the OAuth flow
 - **Secure credential storage** — Canvas API tokens are encrypted at rest with AES-256-GCM
 - **No external auth required** — users enter Canvas credentials directly, no third-party sign-in needed
+- **Timezone-aware results** — users select a timezone during setup and timestamp results include local companion fields
+- **Optional read-only mode** — users can hide Canvas tools that create, update, submit, post, enroll, or otherwise mutate data
 - **54 Canvas tools** — courses, assignments, submissions, modules, pages, discussions, quizzes, files, calendar, conversations, rubrics, accounts, and more
 - **Auto-sync from upstream** — tools, types, and API methods are generated from [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms) with zero manual porting
 
@@ -63,8 +65,9 @@ Your server will be available at `https://<your-worker>.workers.dev/mcp`.
 2. Go to **Settings > Integrations > Add MCP Server**
 3. Enter your server URL: `https://<your-worker>.workers.dev/mcp`
 4. An approval page will open — enter your **Canvas domain** (e.g. `school.instructure.com`) and **Canvas API token**
-5. Click **Approve**
-6. Done — all Canvas tools are now available in your conversation
+5. Choose the timezone to use for local timestamp fields, and optionally enable **read-only mode**
+6. Click **Approve**
+7. Done — Canvas tools are now available in your conversation
 
 ### Generating a Canvas API token
 
@@ -91,11 +94,14 @@ Install or load this repository as a local Codex plugin. On first use, Codex wil
 1. Approve the MCP connection in the browser.
 2. Enter your Canvas domain, such as `school.instructure.com`.
 3. Enter your Canvas API token.
-4. Return to Codex and use the Canvas tools.
+4. Choose the timezone to use for local timestamp fields, and optionally enable read-only mode.
+5. Return to Codex and use the Canvas tools.
 
 If you deploy your own Worker, update the `url` in `.mcp.json` to your deployed `/mcp` endpoint before installing the plugin.
 
 ## Available tools
+
+When read-only mode is enabled during setup, mutating tools are not registered. This hides tools such as `canvas_create_course`, `canvas_update_course`, `canvas_create_assignment`, `canvas_update_assignment`, `canvas_submit_assignment`, `canvas_submit_grade`, `canvas_create_conversation`, `canvas_update_user_profile`, `canvas_enroll_user`, `canvas_mark_module_item_complete`, `canvas_post_to_discussion`, `canvas_create_quiz`, `canvas_start_quiz_attempt`, `canvas_create_user`, and `canvas_create_account_report`.
 
 | Category | Tools |
 |----------|-------|
@@ -134,9 +140,9 @@ The sync script (`scripts/sync-upstream.ts`) fetches the upstream source, parses
 ```
 User connects MCP server in Claude
   → GET /authorize → Approval page with Canvas credential fields
-  → User enters Canvas token + domain, clicks Approve
-  → POST /authorize → Credentials encrypted (AES-256-GCM) and stored per-user in KV
-  → MCP connects → Server loads credentials from KV → All Canvas tools available
+  → User enters Canvas token + domain, selects timezone/read-only preferences, clicks Approve
+  → POST /authorize → Token is encrypted and preferences are stored per-user in KV
+  → MCP connects → Server loads credentials from KV → Canvas tools registered for the selected mode
 ```
 
 ## Local development

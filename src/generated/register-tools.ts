@@ -4,11 +4,18 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { CanvasClient } from "../canvas-client.js";
 import { CanvasAPIError } from "../types.js";
+import { normalizeTimezone } from "../utils.js";
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+type RegisterToolsOptions = { timezone?: string; readOnly?: boolean };
 
-function ok(data: unknown): ToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const MUTATING_TOOL_NAMES = new Set<string>(["canvas_create_course", "canvas_update_course", "canvas_create_assignment", "canvas_update_assignment", "canvas_submit_assignment", "canvas_submit_grade", "canvas_create_conversation", "canvas_update_user_profile", "canvas_enroll_user", "canvas_mark_module_item_complete", "canvas_post_to_discussion", "canvas_create_quiz", "canvas_start_quiz_attempt", "canvas_create_user", "canvas_create_account_report"]);
+const DESTRUCTIVE_TOOL_NAMES = new Set<string>(["canvas_update_course", "canvas_update_assignment", "canvas_submit_assignment", "canvas_submit_grade", "canvas_update_user_profile", "canvas_mark_module_item_complete"]);
+const IDEMPOTENT_TOOL_NAMES = new Set<string>(["canvas_update_course", "canvas_update_assignment", "canvas_submit_grade", "canvas_update_user_profile", "canvas_mark_module_item_complete"]);
+
+function ok(data: unknown, formatter: Intl.DateTimeFormat): ToolResult {
+  return { content: [{ type: "text", text: JSON.stringify(addLocalizedDateFields(data, formatter), null, 2) }] };
 }
 
 function fail(error: unknown): ToolResult {
@@ -23,57 +30,113 @@ function fail(error: unknown): ToolResult {
   return { content: [{ type: "text", text }], isError: true };
 }
 
-export function registerAllTools(server: McpServer, client: CanvasClient): void {
-  server.registerTool(
+function addLocalizedDateFields(data: unknown, formatter: Intl.DateTimeFormat): unknown {
+  if (Array.isArray(data)) return data.map((item) => addLocalizedDateFields(item, formatter));
+  if (!data || typeof data !== "object") return data;
+
+  const record = data as Record<string, unknown>;
+  const localized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    localized[key] = addLocalizedDateFields(value, formatter);
+    const localKey = `${key}_local`;
+    const localValue = typeof value === "string" ? formatLocalDate(value, formatter) : null;
+    if (localValue && !Object.prototype.hasOwnProperty.call(record, localKey)) {
+      localized[localKey] = localValue;
+    }
+  }
+  return localized;
+}
+
+function formatLocalDate(value: string, formatter: Intl.DateTimeFormat): string | null {
+  if (!ISO_DATE_TIME_PATTERN.test(value)) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatter.format(date);
+}
+
+function isMutableTool(toolName: string): boolean {
+  return MUTATING_TOOL_NAMES.has(toolName);
+}
+
+function shouldRegisterTool(toolName: string, readOnly: boolean): boolean {
+  return !readOnly || !isMutableTool(toolName);
+}
+
+function toolAnnotations(toolName: string) {
+  if (!isMutableTool(toolName)) return { readOnlyHint: true };
+  return {
+    readOnlyHint: false,
+    destructiveHint: DESTRUCTIVE_TOOL_NAMES.has(toolName),
+    idempotentHint: IDEMPOTENT_TOOL_NAMES.has(toolName),
+    openWorldHint: false,
+  };
+}
+
+export function registerAllTools(server: McpServer, client: CanvasClient, options: RegisterToolsOptions = {}): void {
+  const readOnly = options.readOnly ?? false;
+  const timezone = normalizeTimezone(options.timezone);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+    timeZoneName: "short",
+    timeZone: timezone,
+    year: "numeric",
+  });
+  if (shouldRegisterTool("canvas_health_check", readOnly)) server.registerTool(
     "canvas_health_check",
     {
       description: "Check the health and connectivity of the Canvas API",
       inputSchema: {},
+      annotations: toolAnnotations("canvas_health_check"),
     },
     async () => {
       try {
-        return ok(await client.healthCheck());
+        return ok(await client.healthCheck(), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_courses", readOnly)) server.registerTool(
     "canvas_list_courses",
     {
       description: "List all courses for the current user",
       inputSchema: {
         include_ended: z.boolean().describe("Include ended courses").optional(),
       },
+      annotations: toolAnnotations("canvas_list_courses"),
     },
     async (args) => {
       try {
-        return ok(await client.listCourses(args.include_ended ?? false));
+        return ok(await client.listCourses(args.include_ended ?? false), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_course", readOnly)) server.registerTool(
     "canvas_get_course",
     {
       description: "Get detailed information about a specific course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_get_course"),
     },
     async (args) => {
       try {
-        return ok(await client.getCourse(args.course_id));
+        return ok(await client.getCourse(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_create_course", readOnly)) server.registerTool(
     "canvas_create_course",
     {
       description: "Create a new course in Canvas",
@@ -103,17 +166,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         time_zone: z.string().describe("Course time zone").optional(),
         syllabus_body: z.string().describe("Course syllabus content").optional(),
       },
+      annotations: toolAnnotations("canvas_create_course"),
     },
     async (args) => {
       try {
-        return ok(await client.createCourse(args));
+        return ok(await client.createCourse(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_update_course", readOnly)) server.registerTool(
     "canvas_update_course",
     {
       description: "Update an existing course in Canvas",
@@ -140,17 +204,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         time_zone: z.string().describe("Course time zone").optional(),
         syllabus_body: z.string().describe("Updated syllabus content").optional(),
       },
+      annotations: toolAnnotations("canvas_update_course"),
     },
     async (args) => {
       try {
-        return ok(await client.updateCourse(args));
+        return ok(await client.updateCourse(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_assignments", readOnly)) server.registerTool(
     "canvas_list_assignments",
     {
       description: "List assignments for a course",
@@ -158,17 +223,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         include_submissions: z.boolean().describe("Include submission data").optional(),
       },
+      annotations: toolAnnotations("canvas_list_assignments"),
     },
     async (args) => {
       try {
-        return ok(await client.listAssignments(args.course_id, args.include_submissions ?? false));
+        return ok(await client.listAssignments(args.course_id, args.include_submissions ?? false), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_assignment", readOnly)) server.registerTool(
     "canvas_get_assignment",
     {
       description: "Get detailed information about a specific assignment",
@@ -177,17 +243,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         assignment_id: z.number().describe("ID of the assignment"),
         include_submission: z.boolean().describe("Include user's submission data").optional(),
       },
+      annotations: toolAnnotations("canvas_get_assignment"),
     },
     async (args) => {
       try {
-        return ok(await client.getAssignment(args.course_id, args.assignment_id, args.include_submission ?? false));
+        return ok(await client.getAssignment(args.course_id, args.assignment_id, args.include_submission ?? false), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_create_assignment", readOnly)) server.registerTool(
     "canvas_create_assignment",
     {
       description: "Create a new assignment in a Canvas course",
@@ -201,17 +268,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         allowed_extensions: z.array(z.string()).describe("Allowed file extensions for submissions").optional(),
         published: z.boolean().describe("Whether the assignment is published").optional(),
       },
+      annotations: toolAnnotations("canvas_create_assignment"),
     },
     async (args) => {
       try {
-        return ok(await client.createAssignment(args));
+        return ok(await client.createAssignment(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_update_assignment", readOnly)) server.registerTool(
     "canvas_update_assignment",
     {
       description: "Update an existing assignment",
@@ -224,34 +292,36 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         points_possible: z.number().describe("New maximum points").optional(),
         published: z.boolean().describe("Whether the assignment is published").optional(),
       },
+      annotations: toolAnnotations("canvas_update_assignment"),
     },
     async (args) => {
       try {
-        return ok(await client.updateAssignment(args));
+        return ok(await client.updateAssignment(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_assignment_groups", readOnly)) server.registerTool(
     "canvas_list_assignment_groups",
     {
       description: "List assignment groups for a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_assignment_groups"),
     },
     async (args) => {
       try {
-        return ok(await client.listAssignmentGroups(args.course_id));
+        return ok(await client.listAssignmentGroups(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_submission", readOnly)) server.registerTool(
     "canvas_get_submission",
     {
       description: "Get submission details for an assignment",
@@ -260,17 +330,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         assignment_id: z.number().describe("ID of the assignment"),
         user_id: z.number().describe("ID of the user (optional, defaults to self)").optional(),
       },
+      annotations: toolAnnotations("canvas_get_submission"),
     },
     async (args) => {
       try {
-        return ok(await client.getSubmission(args.course_id, args.assignment_id, args.user_id ?? "self"));
+        return ok(await client.getSubmission(args.course_id, args.assignment_id, args.user_id ?? "self"), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_submit_assignment", readOnly)) server.registerTool(
     "canvas_submit_assignment",
     {
       description: "Submit work for an assignment",
@@ -282,17 +353,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         url: z.string().describe("URL for URL submissions").optional(),
         file_ids: z.array(z.number()).describe("File IDs for file submissions").optional(),
       },
+      annotations: toolAnnotations("canvas_submit_assignment"),
     },
     async (args) => {
       try {
-        return ok(await client.submitAssignment(args));
+        return ok(await client.submitAssignment(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_submit_grade", readOnly)) server.registerTool(
     "canvas_submit_grade",
     {
       description: "Submit a grade for a student's assignment (teacher only)",
@@ -303,17 +375,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         grade: z.union([z.number(), z.string()]).describe("Grade to submit (number or letter grade)"),
         comment: z.string().describe("Optional comment on the submission").optional(),
       },
+      annotations: toolAnnotations("canvas_submit_grade"),
     },
     async (args) => {
       try {
-        return ok(await client.submitGrade(args));
+        return ok(await client.submitGrade(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_files", readOnly)) server.registerTool(
     "canvas_list_files",
     {
       description: "List files in a course or folder",
@@ -321,68 +394,72 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         folder_id: z.number().describe("ID of the folder (optional)").optional(),
       },
+      annotations: toolAnnotations("canvas_list_files"),
     },
     async (args) => {
       try {
-        return ok(await client.listFiles(args.course_id, args.folder_id));
+        return ok(await client.listFiles(args.course_id, args.folder_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_file", readOnly)) server.registerTool(
     "canvas_get_file",
     {
       description: "Get information about a specific file",
       inputSchema: {
         file_id: z.number().describe("ID of the file"),
       },
+      annotations: toolAnnotations("canvas_get_file"),
     },
     async (args) => {
       try {
-        return ok(await client.getFile(args.file_id));
+        return ok(await client.getFile(args.file_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_folders", readOnly)) server.registerTool(
     "canvas_list_folders",
     {
       description: "List folders in a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_folders"),
     },
     async (args) => {
       try {
-        return ok(await client.listFolders(args.course_id));
+        return ok(await client.listFolders(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_pages", readOnly)) server.registerTool(
     "canvas_list_pages",
     {
       description: "List pages in a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_pages"),
     },
     async (args) => {
       try {
-        return ok(await client.listPages(args.course_id));
+        return ok(await client.listPages(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_page", readOnly)) server.registerTool(
     "canvas_get_page",
     {
       description: "Get content of a specific page",
@@ -390,17 +467,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         page_url: z.string().describe("URL slug of the page"),
       },
+      annotations: toolAnnotations("canvas_get_page"),
     },
     async (args) => {
       try {
-        return ok(await client.getPage(args.course_id, args.page_url));
+        return ok(await client.getPage(args.course_id, args.page_url), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_calendar_events", readOnly)) server.registerTool(
     "canvas_list_calendar_events",
     {
       description: "List calendar events",
@@ -408,111 +486,118 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         start_date: z.string().describe("Start date (ISO format)").optional(),
         end_date: z.string().describe("End date (ISO format)").optional(),
       },
+      annotations: toolAnnotations("canvas_list_calendar_events"),
     },
     async (args) => {
       try {
-        return ok(await client.listCalendarEvents(args.start_date, args.end_date));
+        return ok(await client.listCalendarEvents(args.start_date, args.end_date), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_upcoming_assignments", readOnly)) server.registerTool(
     "canvas_get_upcoming_assignments",
     {
       description: "Get upcoming assignment due dates",
       inputSchema: {
         limit: z.number().describe("Maximum number of assignments to return").optional(),
       },
+      annotations: toolAnnotations("canvas_get_upcoming_assignments"),
     },
     async (args) => {
       try {
-        return ok(await client.getUpcomingAssignments(args.limit ?? 10));
+        return ok(await client.getUpcomingAssignments(args.limit ?? 10), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_dashboard", readOnly)) server.registerTool(
     "canvas_get_dashboard",
     {
       description: "Get user's dashboard information",
       inputSchema: {},
+      annotations: toolAnnotations("canvas_get_dashboard"),
     },
     async () => {
       try {
-        return ok(await client.getDashboard());
+        return ok(await client.getDashboard(), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_dashboard_cards", readOnly)) server.registerTool(
     "canvas_get_dashboard_cards",
     {
       description: "Get dashboard course cards",
       inputSchema: {},
+      annotations: toolAnnotations("canvas_get_dashboard_cards"),
     },
     async () => {
       try {
-        return ok(await client.getDashboardCards());
+        return ok(await client.getDashboardCards(), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_course_grades", readOnly)) server.registerTool(
     "canvas_get_course_grades",
     {
       description: "Get grades for a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_get_course_grades"),
     },
     async (args) => {
       try {
-        return ok(await client.getCourseGrades(args.course_id));
+        return ok(await client.getCourseGrades(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_user_grades", readOnly)) server.registerTool(
     "canvas_get_user_grades",
     {
       description: "Get all grades for the current user",
       inputSchema: {},
+      annotations: toolAnnotations("canvas_get_user_grades"),
     },
     async () => {
       try {
-        return ok(await client.getUserGrades());
+        return ok(await client.getUserGrades(), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_user_profile", readOnly)) server.registerTool(
     "canvas_get_user_profile",
     {
       description: "Get current user's profile",
       inputSchema: {},
+      annotations: toolAnnotations("canvas_get_user_profile"),
     },
     async () => {
       try {
-        return ok(await client.getUserProfile());
+        return ok(await client.getUserProfile(), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_update_user_profile", readOnly)) server.registerTool(
     "canvas_update_user_profile",
     {
       description: "Update current user's profile",
@@ -523,17 +608,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         title: z.string().describe("User's title").optional(),
         time_zone: z.string().describe("User's time zone").optional(),
       },
+      annotations: toolAnnotations("canvas_update_user_profile"),
     },
     async (args) => {
       try {
-        return ok(await client.updateUserProfile(args));
+        return ok(await client.updateUserProfile(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_enroll_user", readOnly)) server.registerTool(
     "canvas_enroll_user",
     {
       description: "Enroll a user in a course",
@@ -543,34 +629,36 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         role: z.string().describe("Role for the enrollment (StudentEnrollment, TeacherEnrollment, etc.)").optional(),
         enrollment_state: z.string().describe("State of the enrollment (active, invited, etc.)").optional(),
       },
+      annotations: toolAnnotations("canvas_enroll_user"),
     },
     async (args) => {
       try {
-        return ok(await client.enrollUser(args));
+        return ok(await client.enrollUser(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_modules", readOnly)) server.registerTool(
     "canvas_list_modules",
     {
       description: "List all modules in a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_modules"),
     },
     async (args) => {
       try {
-        return ok(await client.listModules(args.course_id));
+        return ok(await client.listModules(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_module", readOnly)) server.registerTool(
     "canvas_get_module",
     {
       description: "Get details of a specific module",
@@ -578,17 +666,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         module_id: z.number().describe("ID of the module"),
       },
+      annotations: toolAnnotations("canvas_get_module"),
     },
     async (args) => {
       try {
-        return ok(await client.getModule(args.course_id, args.module_id));
+        return ok(await client.getModule(args.course_id, args.module_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_module_items", readOnly)) server.registerTool(
     "canvas_list_module_items",
     {
       description: "List all items in a module",
@@ -596,17 +685,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         module_id: z.number().describe("ID of the module"),
       },
+      annotations: toolAnnotations("canvas_list_module_items"),
     },
     async (args) => {
       try {
-        return ok(await client.listModuleItems(args.course_id, args.module_id));
+        return ok(await client.listModuleItems(args.course_id, args.module_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_module_item", readOnly)) server.registerTool(
     "canvas_get_module_item",
     {
       description: "Get details of a specific module item",
@@ -615,17 +705,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         module_id: z.number().describe("ID of the module"),
         item_id: z.number().describe("ID of the module item"),
       },
+      annotations: toolAnnotations("canvas_get_module_item"),
     },
     async (args) => {
       try {
-        return ok(await client.getModuleItem(args.course_id, args.module_id, args.item_id));
+        return ok(await client.getModuleItem(args.course_id, args.module_id, args.item_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_mark_module_item_complete", readOnly)) server.registerTool(
     "canvas_mark_module_item_complete",
     {
       description: "Mark a module item as complete",
@@ -634,35 +725,37 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         module_id: z.number().describe("ID of the module"),
         item_id: z.number().describe("ID of the module item"),
       },
+      annotations: toolAnnotations("canvas_mark_module_item_complete"),
     },
     async (args) => {
       try {
         await client.markModuleItemComplete(args.course_id, args.module_id, args.item_id);
-        return ok({ status: "ok" });
+        return ok({ status: "ok" }, formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_discussion_topics", readOnly)) server.registerTool(
     "canvas_list_discussion_topics",
     {
       description: "List all discussion topics in a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_discussion_topics"),
     },
     async (args) => {
       try {
-        return ok(await client.listDiscussionTopics(args.course_id));
+        return ok(await client.listDiscussionTopics(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_discussion_topic", readOnly)) server.registerTool(
     "canvas_get_discussion_topic",
     {
       description: "Get details of a specific discussion topic",
@@ -670,17 +763,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         topic_id: z.number().describe("ID of the discussion topic"),
       },
+      annotations: toolAnnotations("canvas_get_discussion_topic"),
     },
     async (args) => {
       try {
-        return ok(await client.getDiscussionTopic(args.course_id, args.topic_id));
+        return ok(await client.getDiscussionTopic(args.course_id, args.topic_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_post_to_discussion", readOnly)) server.registerTool(
     "canvas_post_to_discussion",
     {
       description: "Post a message to a discussion topic",
@@ -689,51 +783,54 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         topic_id: z.number().describe("ID of the discussion topic"),
         message: z.string().describe("Message content"),
       },
+      annotations: toolAnnotations("canvas_post_to_discussion"),
     },
     async (args) => {
       try {
-        return ok(await client.postToDiscussion(args.course_id, args.topic_id, args.message));
+        return ok(await client.postToDiscussion(args.course_id, args.topic_id, args.message), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_announcements", readOnly)) server.registerTool(
     "canvas_list_announcements",
     {
       description: "List all announcements in a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_announcements"),
     },
     async (args) => {
       try {
-        return ok(await client.listAnnouncements(args.course_id));
+        return ok(await client.listAnnouncements(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_quizzes", readOnly)) server.registerTool(
     "canvas_list_quizzes",
     {
       description: "List all quizzes in a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_quizzes"),
     },
     async (args) => {
       try {
-        return ok(await client.listQuizzes(args.course_id));
+        return ok(await client.listQuizzes(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_quiz", readOnly)) server.registerTool(
     "canvas_get_quiz",
     {
       description: "Get details of a specific quiz",
@@ -741,17 +838,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         quiz_id: z.number().describe("ID of the quiz"),
       },
+      annotations: toolAnnotations("canvas_get_quiz"),
     },
     async (args) => {
       try {
-        return ok(await client.getQuiz(args.course_id, args.quiz_id));
+        return ok(await client.getQuiz(args.course_id, args.quiz_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_create_quiz", readOnly)) server.registerTool(
     "canvas_create_quiz",
     {
       description: "Create a new quiz in a course",
@@ -764,17 +862,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         description: z.string().describe("Description of the quiz").optional(),
         due_at: z.string().describe("Due date (ISO format)").optional(),
       },
+      annotations: toolAnnotations("canvas_create_quiz"),
     },
     async (args) => {
       try {
-        return ok(await client.createQuiz(args));
+        return ok(await client.createQuiz(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_start_quiz_attempt", readOnly)) server.registerTool(
     "canvas_start_quiz_attempt",
     {
       description: "Start a new quiz attempt",
@@ -782,34 +881,36 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         quiz_id: z.number().describe("ID of the quiz"),
       },
+      annotations: toolAnnotations("canvas_start_quiz_attempt"),
     },
     async (args) => {
       try {
-        return ok(await client.startQuizAttempt(args.course_id, args.quiz_id));
+        return ok(await client.startQuizAttempt(args.course_id, args.quiz_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_rubrics", readOnly)) server.registerTool(
     "canvas_list_rubrics",
     {
       description: "List rubrics for a course",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_list_rubrics"),
     },
     async (args) => {
       try {
-        return ok(await client.listRubrics(args.course_id));
+        return ok(await client.listRubrics(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_rubric", readOnly)) server.registerTool(
     "canvas_get_rubric",
     {
       description: "Get details of a specific rubric",
@@ -817,49 +918,52 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         course_id: z.number().describe("ID of the course"),
         rubric_id: z.number().describe("ID of the rubric"),
       },
+      annotations: toolAnnotations("canvas_get_rubric"),
     },
     async (args) => {
       try {
-        return ok(await client.getRubric(args.course_id, args.rubric_id));
+        return ok(await client.getRubric(args.course_id, args.rubric_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_conversations", readOnly)) server.registerTool(
     "canvas_list_conversations",
     {
       description: "List user's conversations",
       inputSchema: {},
+      annotations: toolAnnotations("canvas_list_conversations"),
     },
     async () => {
       try {
-        return ok(await client.listConversations());
+        return ok(await client.listConversations(), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_conversation", readOnly)) server.registerTool(
     "canvas_get_conversation",
     {
       description: "Get details of a specific conversation",
       inputSchema: {
         conversation_id: z.number().describe("ID of the conversation"),
       },
+      annotations: toolAnnotations("canvas_get_conversation"),
     },
     async (args) => {
       try {
-        return ok(await client.getConversation(args.conversation_id));
+        return ok(await client.getConversation(args.conversation_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_create_conversation", readOnly)) server.registerTool(
     "canvas_create_conversation",
     {
       description: "Create a new conversation",
@@ -868,66 +972,70 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         body: z.string().describe("Message body"),
         subject: z.string().describe("Message subject").optional(),
       },
+      annotations: toolAnnotations("canvas_create_conversation"),
     },
     async (args) => {
       try {
-        return ok(await client.createConversation(args.recipients, args.body, args.subject));
+        return ok(await client.createConversation(args.recipients, args.body, args.subject), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_notifications", readOnly)) server.registerTool(
     "canvas_list_notifications",
     {
       description: "List user's notifications",
       inputSchema: {},
+      annotations: toolAnnotations("canvas_list_notifications"),
     },
     async () => {
       try {
-        return ok(await client.listNotifications());
+        return ok(await client.listNotifications(), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_syllabus", readOnly)) server.registerTool(
     "canvas_get_syllabus",
     {
       description: "Get course syllabus",
       inputSchema: {
         course_id: z.number().describe("ID of the course"),
       },
+      annotations: toolAnnotations("canvas_get_syllabus"),
     },
     async (args) => {
       try {
-        return ok(await client.getSyllabus(args.course_id));
+        return ok(await client.getSyllabus(args.course_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_account", readOnly)) server.registerTool(
     "canvas_get_account",
     {
       description: "Get account details",
       inputSchema: {
         account_id: z.number().describe("ID of the account"),
       },
+      annotations: toolAnnotations("canvas_get_account"),
     },
     async (args) => {
       try {
-        return ok(await client.getAccount(args.account_id));
+        return ok(await client.getAccount(args.account_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_account_courses", readOnly)) server.registerTool(
     "canvas_list_account_courses",
     {
       description: "List courses for an account",
@@ -940,17 +1048,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         sort: z.enum(["course_name", "sis_course_id", "teacher", "account_name"]).describe("Sort order").optional(),
         order: z.enum(["asc", "desc"]).describe("Sort direction").optional(),
       },
+      annotations: toolAnnotations("canvas_list_account_courses"),
     },
     async (args) => {
       try {
-        return ok(await client.listAccountCourses(args));
+        return ok(await client.listAccountCourses(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_account_users", readOnly)) server.registerTool(
     "canvas_list_account_users",
     {
       description: "List users for an account",
@@ -960,17 +1069,18 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         sort: z.enum(["username", "email", "sis_id", "last_login"]).describe("Sort order").optional(),
         order: z.enum(["asc", "desc"]).describe("Sort direction").optional(),
       },
+      annotations: toolAnnotations("canvas_list_account_users"),
     },
     async (args) => {
       try {
-        return ok(await client.listAccountUsers(args));
+        return ok(await client.listAccountUsers(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_create_user", readOnly)) server.registerTool(
     "canvas_create_user",
     {
       description: "Create a new user in an account",
@@ -979,51 +1089,54 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         user: z.object({ name: z.string().describe("Full name of the user"), short_name: z.string().describe("Short name of the user").optional(), sortable_name: z.string().describe("Sortable name (Last, First)").optional(), time_zone: z.string().describe("User's time zone").optional() }),
         pseudonym: z.object({ unique_id: z.string().describe("Unique login ID (email or username)"), password: z.string().describe("User's password").optional(), sis_user_id: z.string().describe("SIS ID for the user").optional(), send_confirmation: z.boolean().describe("Send confirmation email").optional() }),
       },
+      annotations: toolAnnotations("canvas_create_user"),
     },
     async (args) => {
       try {
-        return ok(await client.createUser(args));
+        return ok(await client.createUser(args), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_list_sub_accounts", readOnly)) server.registerTool(
     "canvas_list_sub_accounts",
     {
       description: "List sub-accounts for an account",
       inputSchema: {
         account_id: z.number().describe("ID of the parent account"),
       },
+      annotations: toolAnnotations("canvas_list_sub_accounts"),
     },
     async (args) => {
       try {
-        return ok(await client.listSubAccounts(args.account_id));
+        return ok(await client.listSubAccounts(args.account_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_get_account_reports", readOnly)) server.registerTool(
     "canvas_get_account_reports",
     {
       description: "List available reports for an account",
       inputSchema: {
         account_id: z.number().describe("ID of the account"),
       },
+      annotations: toolAnnotations("canvas_get_account_reports"),
     },
     async (args) => {
       try {
-        return ok(await client.getAccountReports(args.account_id));
+        return ok(await client.getAccountReports(args.account_id), formatter);
       } catch (error) {
         return fail(error);
       }
     },
   );
 
-  server.registerTool(
+  if (shouldRegisterTool("canvas_create_account_report", readOnly)) server.registerTool(
     "canvas_create_account_report",
     {
       description: "Generate a report for an account",
@@ -1032,10 +1145,11 @@ export function registerAllTools(server: McpServer, client: CanvasClient): void 
         report: z.string().describe("Type of report to generate"),
         parameters: z.record(z.string(), z.unknown()).describe("Report parameters").optional(),
       },
+      annotations: toolAnnotations("canvas_create_account_report"),
     },
     async (args) => {
       try {
-        return ok(await client.createAccountReport(args));
+        return ok(await client.createAccountReport(args), formatter);
       } catch (error) {
         return fail(error);
       }

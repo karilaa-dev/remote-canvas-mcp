@@ -7,6 +7,8 @@
  * cookie-signing key used elsewhere.
  */
 
+import { normalizeTimezone } from "./utils.js";
+
 const KV_PREFIX = "canvas:credentials:";
 const HKDF_INFO = "canvas-credentials";
 const IV_BYTES = 12;
@@ -15,12 +17,16 @@ const encoder = new TextEncoder();
 export interface CanvasCredentials {
   canvasApiToken: string;
   canvasDomain: string;
+  timezone?: string;
+  readOnly?: boolean;
 }
 
 interface StoredCredentials {
   /** base64(IV + ciphertext) */
   encryptedToken: string;
   canvasDomain: string;
+  timezone?: string;
+  readOnly?: boolean;
   updatedAt: string;
 }
 
@@ -40,7 +46,12 @@ export async function getCanvasCredentials(
     const stored = JSON.parse(raw) as StoredCredentials;
     const key = await deriveKey(encryptionKey);
     const canvasApiToken = await decrypt(stored.encryptedToken, key);
-    return { canvasApiToken, canvasDomain: stored.canvasDomain };
+    return {
+      canvasApiToken,
+      canvasDomain: stored.canvasDomain,
+      timezone: normalizeTimezone(stored.timezone),
+      readOnly: stored.readOnly ?? false,
+    };
   } catch {
     // Parse or decryption failed (corrupted data, key rotated, etc.)
     return null;
@@ -59,6 +70,8 @@ export async function storeCanvasCredentials(
   const stored: StoredCredentials = {
     encryptedToken,
     canvasDomain: credentials.canvasDomain,
+    timezone: normalizeTimezone(credentials.timezone),
+    readOnly: credentials.readOnly ?? false,
     updatedAt: new Date().toISOString(),
   };
 

@@ -12,6 +12,23 @@ const COOKIE_NAMES = {
 } as const;
 
 const THIRTY_DAYS_IN_SECONDS = 2592000;
+const TIMEZONE_OPTIONS = [
+  "UTC",
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "America/Phoenix",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Asia/Kolkata",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Australia/Sydney",
+];
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -51,6 +68,10 @@ function sanitizeUrl(url: string): string {
   const scheme = parsedUrl.protocol.slice(0, -1).toLowerCase();
   if (scheme !== "https" && scheme !== "http") return "";
   return normalized;
+}
+
+function renderTimezoneOptions(): string {
+  return TIMEZONE_OPTIONS.map((timezone) => `<option value="${sanitizeText(timezone)}">${sanitizeText(timezone)}</option>`).join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -156,9 +177,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .alert{font-size:1.5rem;font-weight:400;margin:1rem 0;text-align:center}
 .form-group{margin-bottom:1rem}
 .form-group label{display:block;font-weight:500;margin-bottom:.25rem;font-size:.9rem}
-.form-group input[type="text"],.form-group input[type="password"]{width:100%;padding:.5rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.95rem;box-sizing:border-box}
-.form-group input:focus{outline:none;border-color:#0070f3;box-shadow:0 0 0 2px rgba(0,112,243,.15)}
+.form-group input[type="text"],.form-group input[type="password"],.form-group select{width:100%;padding:.5rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.95rem;box-sizing:border-box;background:#fff}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#0070f3;box-shadow:0 0 0 2px rgba(0,112,243,.15)}
 .form-group .hint{font-size:.8rem;color:#6b7280;margin-top:.25rem}
+.checkbox-group{display:flex;gap:.75rem;align-items:flex-start}
+.checkbox-group input{margin-top:.3rem}
+.checkbox-group label{margin:0}
 .section-label{font-weight:600;font-size:.95rem;margin:1.5rem 0 .75rem;padding-top:1rem;border-top:1px solid #e5e7eb}
 .actions{display:flex;justify-content:flex-end;gap:1rem;margin-top:2rem}
 .button{padding:.75rem 1.5rem;border-radius:6px;font-weight:500;cursor:pointer;border:none;font-size:1rem}
@@ -184,8 +208,31 @@ ${clientUri ? `<p>Website: <a href="${clientUri}" target="_blank">${clientUri}</
 <input type="password" id="canvas_api_token" name="canvas_api_token" required placeholder="Your API access token">
 <div class="hint">Generate one in Canvas: Account &rarr; Settings &rarr; New Access Token</div>
 </div>
+<div class="form-group">
+<label for="timezone">Timezone</label>
+<select id="timezone" name="timezone">${renderTimezoneOptions()}</select>
+<div class="hint">Used to add local date/time fields to Canvas results. Defaults to your browser timezone when available.</div>
+</div>
+<div class="form-group checkbox-group">
+<input type="checkbox" id="read_only" name="read_only">
+<div>
+<label for="read_only">Enable read-only mode</label>
+<div class="hint">Only expose Canvas tools that read data. Tools that create, update, submit, post, enroll, or mark items complete will be hidden.</div>
+</div>
+</div>
 <div class="actions"><button type="button" class="button button-secondary" onclick="window.history.back()">Cancel</button><button type="submit" class="button button-primary">Approve</button></div>
 </form>
+<script>
+(() => {
+  const select = document.getElementById("timezone");
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  if (!select || !timezone) return;
+  if (!Array.from(select.options).some((option) => option.value === timezone)) {
+    select.add(new Option(timezone, timezone));
+  }
+  select.value = timezone;
+})();
+</script>
 </div></div></body></html>`;
 
   return new Response(htmlContent, {

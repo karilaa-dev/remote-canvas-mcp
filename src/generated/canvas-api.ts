@@ -4,7 +4,7 @@ import type { CanvasClient } from "../canvas-client.js";
 
 // Extend CanvasClient prototype with all API methods
 export function installApiMethods(Client: typeof CanvasClient): void {
-  const proto = Client.prototype as any;
+  const proto = Client.prototype;
 
   proto.healthCheck = async function() {
     try {

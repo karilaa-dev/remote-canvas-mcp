@@ -1,7 +1,7 @@
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
 import { storeCanvasCredentials } from "./credential-store.js";
-import type { Props } from "./utils.js";
+import { normalizeTimezone, type Props } from "./utils.js";
 import {
   addApprovedClient,
   generateCSRFProtection,
@@ -59,6 +59,8 @@ app.post("/authorize", async (c) => {
 
     const canvasApiToken = getFormString(formData, "canvas_api_token");
     const canvasDomain = getFormString(formData, "canvas_domain");
+    const timezone = normalizeTimezone(getFormString(formData, "timezone"));
+    const readOnly = getFormString(formData, "read_only") === "on";
     if (!canvasApiToken || !canvasDomain) {
       return c.text("Canvas API token and domain are required", 400);
     }
@@ -68,7 +70,7 @@ app.post("/authorize", async (c) => {
     await storeCanvasCredentials(
       c.env.OAUTH_KV,
       userId,
-      { canvasApiToken, canvasDomain },
+      { canvasApiToken, canvasDomain, timezone, readOnly },
       c.env.COOKIE_ENCRYPTION_KEY,
     );
 
@@ -83,7 +85,7 @@ app.post("/authorize", async (c) => {
       userId,
       metadata: { label: `canvas-user-${userId.slice(0, 8)}` },
       scope: state.oauthReqInfo.scope,
-      props: { login: userId } satisfies Props,
+      props: { login: userId, timezone, readOnly } satisfies Props,
     });
 
     const headers = new Headers({ Location: redirectTo });
