@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "canvas-lms": {
+      "type": "http",
+      "url": "https://remote-canvas-mcp.karilaa-account.workers.dev/mcp",
+      "note": "Remote Canvas LMS MCP server. Uses OAuth on first connection; users enter their Canvas domain and API token in the approval form."
+    }
+  }
+}

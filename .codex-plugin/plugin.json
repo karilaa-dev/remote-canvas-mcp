@@ -1,0 +1,39 @@
+{
+  "name": "remote-canvas-mcp",
+  "version": "1.0.0",
+  "description": "Connect Codex to Canvas LMS through the remote Canvas MCP server.",
+  "author": {
+    "name": "karilaa-dev",
+    "url": "https://github.com/karilaa-dev"
+  },
+  "homepage": "https://github.com/karilaa-dev/remote-canvas-mcp",
+  "repository": "https://github.com/karilaa-dev/remote-canvas-mcp",
+  "license": "UNLICENSED",
+  "keywords": [
+    "canvas",
+    "lms",
+    "mcp",
+    "education",
+    "cloudflare-workers"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Canvas LMS",
+    "shortDescription": "Use Canvas courses, assignments, grades, and more",
+    "longDescription": "Connect Codex to a remote Canvas LMS MCP server deployed on Cloudflare Workers. Each user authorizes with their own Canvas domain and API token, which are stored encrypted by the Worker.",
+    "developerName": "karilaa-dev",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://www.instructure.com/canvas",
+    "defaultPrompt": [
+      "Summarize my Canvas dashboard and upcoming assignments",
+      "List assignments due this week across my courses",
+      "Check my Canvas grades and highlight missing work"
+    ],
+    "screenshots": [],
+    "brandColor": "#E72429"
+  }
+}

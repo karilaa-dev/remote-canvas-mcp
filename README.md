@@ -78,6 +78,23 @@ Your server will be available at `https://<your-worker>.workers.dev/mcp`.
 
 Disconnect and reconnect the MCP server in Claude. The approval page will appear again, letting you enter new credentials.
 
+## Connecting from Codex
+
+This repository is also a Codex plugin. The plugin metadata lives in `.codex-plugin/plugin.json`, and `.mcp.json` points Codex at the deployed remote MCP endpoint:
+
+```text
+https://remote-canvas-mcp.karilaa-account.workers.dev/mcp
+```
+
+Install or load this repository as a local Codex plugin. On first use, Codex will start the same OAuth approval flow as Claude:
+
+1. Approve the MCP connection in the browser.
+2. Enter your Canvas domain, such as `school.instructure.com`.
+3. Enter your Canvas API token.
+4. Return to Codex and use the Canvas tools.
+
+If you deploy your own Worker, update the `url` in `.mcp.json` to your deployed `/mcp` endpoint before installing the plugin.
+
 ## Available tools
 
 | Category | Tools |
