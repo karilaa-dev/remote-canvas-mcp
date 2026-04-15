@@ -10,7 +10,7 @@ Based on [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms), port
 - **Multi-user** — each user provides their own Canvas credentials during the OAuth flow
 - **Secure credential storage** — Canvas API tokens are encrypted at rest with AES-256-GCM
 - **No external auth required** — users enter Canvas credentials directly, no third-party sign-in needed
-- **Timezone-aware results** — users select a timezone during setup and timestamp results include local companion fields
+- **Timezone-aware results** — users select a timezone during setup and timestamp results include local `_local` companion fields
 - **Optional read-only mode** — users can hide Canvas tools that create, update, submit, post, enroll, or otherwise mutate data
 - **54 Canvas tools** — courses, assignments, submissions, modules, pages, discussions, quizzes, files, calendar, conversations, rubrics, accounts, and more
 - **Auto-sync from upstream** — tools, types, and API methods are generated from [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms) with zero manual porting
@@ -79,7 +79,7 @@ Your server will be available at `https://<your-worker>.workers.dev/mcp`.
 
 ### Updating credentials
 
-Disconnect and reconnect the MCP server in Claude. The approval page will appear again, letting you enter new credentials.
+Disconnect and reconnect the MCP server in Claude. The approval page will appear again, letting you update your Canvas credentials, timezone, and read-only preference.
 
 ## Connecting from Codex
 
@@ -102,6 +102,8 @@ If you deploy your own Worker, update the `url` in `.mcp.json` to your deployed 
 ## Available tools
 
 When read-only mode is enabled during setup, mutating tools are not registered. This hides tools such as `canvas_create_course`, `canvas_update_course`, `canvas_create_assignment`, `canvas_update_assignment`, `canvas_submit_assignment`, `canvas_submit_grade`, `canvas_create_conversation`, `canvas_update_user_profile`, `canvas_enroll_user`, `canvas_mark_module_item_complete`, `canvas_post_to_discussion`, `canvas_create_quiz`, `canvas_start_quiz_attempt`, `canvas_create_user`, and `canvas_create_account_report`.
+
+Timezone-aware results preserve the original Canvas timestamp fields and add localized companion fields with a `_local` suffix. For example, `due_at` remains the raw Canvas ISO timestamp and `due_at_local` is added using the timezone selected during setup.
 
 | Category | Tools |
 |----------|-------|
@@ -148,10 +150,11 @@ User connects MCP server in Claude
 ## Local development
 
 ```bash
-cp .dev.vars.example .dev.vars
-# Fill in COOKIE_ENCRYPTION_KEY
+printf 'COOKIE_ENCRYPTION_KEY=%s\n' "your-random-secret" > .dev.vars
 npm run dev
 ```
+
+`COOKIE_ENCRYPTION_KEY` can be any sufficiently random string. It is used for cookie signing and Canvas credential encryption during local development as well.
 
 ## Project structure
 
