@@ -6,9 +6,11 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
-    "sync": "tsx scripts/sync-upstream.ts"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@cloudflare/workers-oauth-provider": "^0.3.0",
     "agents": "^0.7.6",
     "hono": "^4.12.7",

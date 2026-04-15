@@ -2,7 +2,7 @@
 
 A remote [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for [Canvas LMS](https://www.instructure.com/canvas), deployed on Cloudflare Workers. Connect it to Claude (or any MCP client) and interact with your Canvas courses, assignments, grades, and more through natural language.
 
-Based on [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms), ported to run as a remote MCP server with multi-user support. Tools are **auto-synced** from upstream — run `npm run sync` to regenerate.
+Originally based on [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms), now maintained directly in this repository for easier customization and independent tool evolution.
 
 ## Features
 
@@ -12,8 +12,9 @@ Based on [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms), port
 - **No external auth required** — users enter Canvas credentials directly, no third-party sign-in needed
 - **Timezone-aware results** — users select a timezone during setup and timestamp results include local `_local` companion fields
 - **Optional read-only mode** — users can hide Canvas tools that create, update, submit, post, enroll, or otherwise mutate data
-- **54 Canvas tools** — courses, assignments, submissions, modules, pages, discussions, quizzes, files, calendar, conversations, rubrics, accounts, and more
-- **Auto-sync from upstream** — tools, types, and API methods are generated from [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms) with zero manual porting
+- **55 Canvas tools** — courses, assignments, submissions, modules, pages, discussions, quizzes, files, calendar, conversations, rubrics, accounts, and more
+- **Cross-course assignment range lookup** — query assignments due within a time range across all active courses
+- **Repo-owned Canvas surface** — tools, types, and API methods are maintained directly in this repo
 
 ## Prerequisites
 
@@ -105,6 +106,8 @@ When read-only mode is enabled during setup, mutating tools are not registered. 
 
 Timezone-aware results preserve the original Canvas timestamp fields and add localized companion fields with a `_local` suffix. For example, `due_at` remains the raw Canvas ISO timestamp and `due_at_local` is added using the timezone selected during setup.
 
+For cross-course planning, prefer `canvas_list_assignments_for_active_courses`. `canvas_get_upcoming_assignments` is kept for compatibility with Canvas's generic upcoming-events feed.
+
 | Category | Tools |
 |----------|-------|
 | **Health** | `canvas_health_check` |
@@ -117,25 +120,20 @@ Timezone-aware results preserve the original Canvas timestamp fields and add loc
 | **Quizzes** | `canvas_list_quizzes`, `canvas_get_quiz`, `canvas_create_quiz`, `canvas_start_quiz_attempt` |
 | **Users** | `canvas_get_user_profile`, `canvas_update_user_profile`, `canvas_enroll_user`, `canvas_get_course_grades`, `canvas_get_user_grades` |
 | **Files** | `canvas_list_files`, `canvas_get_file`, `canvas_list_folders` |
-| **Calendar** | `canvas_list_calendar_events`, `canvas_get_upcoming_assignments`, `canvas_get_dashboard`, `canvas_get_dashboard_cards`, `canvas_get_syllabus` |
+| **Calendar** | `canvas_list_calendar_events`, `canvas_get_upcoming_assignments`, `canvas_list_assignments_for_active_courses`, `canvas_get_dashboard`, `canvas_get_dashboard_cards`, `canvas_get_syllabus` |
 | **Conversations** | `canvas_list_conversations`, `canvas_get_conversation`, `canvas_create_conversation`, `canvas_list_notifications` |
 | **Accounts** | `canvas_get_account`, `canvas_list_account_courses`, `canvas_list_account_users`, `canvas_create_user`, `canvas_list_sub_accounts`, `canvas_get_account_reports`, `canvas_create_account_report` |
 | **Rubrics** | `canvas_list_rubrics`, `canvas_get_rubric` |
 
-## Syncing from upstream
+## Maintaining tools
 
-Tools, types, and API methods are auto-generated from the upstream [mcp-canvas-lms](https://github.com/DMontgomery40/mcp-canvas-lms) project. To pull in the latest changes:
+Canvas types, client methods, and MCP tool registrations now live directly under `src/`:
 
-```bash
-npm run sync    # regenerate src/generated/ from upstream
-npm run deploy  # deploy the updated server
-```
+- **`canvas-types.ts`** — checked-in Canvas entity interfaces
+- **`canvas-client.ts`** — HTTP transport, retry, pagination, and Canvas API methods
+- **`canvas-tools.ts`** — MCP tool registrations and response formatting
 
-The sync script (`scripts/sync-upstream.ts`) fetches the upstream source, parses the tool definitions and client methods, and generates three files under `src/generated/`:
-
-- **`types.ts`** — Canvas entity interfaces
-- **`canvas-api.ts`** — fetch-based API methods (transformed from upstream's Axios)
-- **`register-tools.ts`** — all MCP tool registrations with Zod schemas
+This makes it safe to add repo-specific tools, such as `canvas_list_assignments_for_active_courses`, without depending on an upstream generator.
 
 ## How it works
 
@@ -152,6 +150,8 @@ User connects MCP server in Claude
 ```bash
 printf 'COOKIE_ENCRYPTION_KEY=%s\n' "your-random-secret" > .dev.vars
 npm run dev
+npm run typecheck
+npm test
 ```
 
 `COOKIE_ENCRYPTION_KEY` can be any sufficiently random string. It is used for cookie signing and Canvas credential encryption during local development as well.
@@ -161,14 +161,13 @@ npm run dev
 ```
 src/
   index.ts             ← MCP server entry point
-  canvas-client.ts     ← HTTP infrastructure (request, pagination, retry)
-  types.ts             ← Re-exports generated types + CanvasAPIError
-  generated/           ← AUTO-GENERATED by npm run sync
-    types.ts           ← Canvas entity interfaces
-    canvas-api.ts      ← Client API methods (fetch-based)
-    register-tools.ts  ← All 54 tool registrations
-scripts/
-  sync-upstream.ts     ← Code generation script
+  canvas-client.ts     ← HTTP infrastructure + Canvas API methods
+  canvas-tools.ts      ← MCP tool registrations
+  canvas-types.ts      ← Canvas entity interfaces snapshot
+  types.ts             ← Shared exports + CanvasAPIError
+tests/
+  canvas-client.test.ts ← Transport and aggregation behavior tests
+  canvas-tools.test.ts  ← Tool registration and formatting tests
 ```
 
 ## Tech stack
