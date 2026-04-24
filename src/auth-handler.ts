@@ -939,6 +939,49 @@ app.get("/actions/openapi.json", (c) => {
   return c.json(getActionsOpenApiDocument(origin));
 });
 
+app.get("/actions/openapi-oauth.json", (c) => {
+  const origin = new URL(c.req.url).origin;
+  return c.json(getActionsOpenApiDocument(origin, { includeOAuthSecurity: true }));
+});
+
+app.get("/privacy", () => new Response(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas LMS GPT Actions Privacy Policy</title>
+<style>
+body{font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1f2937;background:#f9fafb;margin:0}
+main{max-width:760px;margin:0 auto;padding:40px 20px}
+h1{font-size:30px;line-height:1.15;margin:0 0 18px}
+h2{font-size:18px;margin:28px 0 8px}
+p,li{color:#374151}
+code{background:#eef2f7;border-radius:4px;padding:1px 4px}
+</style>
+</head>
+<body>
+<main>
+<h1>Canvas LMS GPT Actions Privacy Policy</h1>
+<p>This server connects a ChatGPT Custom GPT to Canvas LMS with user-provided Canvas credentials.</p>
+<h2>Data Collected</h2>
+<p>During authorization, the server stores the Canvas domain, Canvas API token, selected timezone, OAuth grant metadata, and encrypted session credentials needed to serve read-only Canvas requests.</p>
+<h2>How Data Is Used</h2>
+<p>Stored credentials are used only to call Canvas LMS APIs requested by the authorized GPT Action user. The Actions API is read-only and does not modify Canvas data.</p>
+<h2>Storage And Security</h2>
+<p>Canvas credentials are encrypted before storage in Cloudflare KV. OAuth access tokens identify the authorized user record and are required for requests to <code>/actions/api/*</code>.</p>
+<h2>Sharing</h2>
+<p>The server does not sell user data. Canvas data is returned to ChatGPT only when the authorized user invokes the GPT Action.</p>
+<h2>Revocation</h2>
+<p>Users can remove the connected account from ChatGPT's connected account controls. Administrators can also delete OAuth clients and clear OAuth diagnostic logs from the server admin UI.</p>
+</main>
+</body>
+</html>`, {
+  headers: {
+    "Content-Type": "text/html; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+  },
+}));
+
 app.get("/admin", () => renderAdminUiPage());
 
 app.get("/admin/oauth-clients", async (c) => {

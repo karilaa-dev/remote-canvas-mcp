@@ -65,6 +65,12 @@ test("serves the browser admin page", async () => {
   assert.match(await response.text(), /Canvas OAuth Admin/);
 });
 
+test("serves a privacy policy page for GPT Actions configuration", async () => {
+  const response = await AuthHandler.request("/privacy", {}, createEnv());
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Canvas LMS GPT Actions Privacy Policy/);
+});
+
 test("admin client list returns public client details", async () => {
   const response = await AuthHandler.request(
     "/admin/oauth-clients",

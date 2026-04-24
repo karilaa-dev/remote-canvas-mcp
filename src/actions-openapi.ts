@@ -9,6 +9,10 @@ type Parameter = {
   schema: JsonSchema;
 };
 
+type OpenApiOptions = {
+  includeOAuthSecurity?: boolean;
+};
+
 const courseIdParam: Parameter = {
   name: "course_id",
   in: "path",
@@ -87,7 +91,12 @@ const errorResponse = {
   },
 };
 
-function actionOperation(summary: string, description: string, parameters: Parameter[] = []) {
+function actionOperation(
+  summary: string,
+  description: string,
+  parameters: Parameter[] = [],
+  options: OpenApiOptions = {},
+) {
   return {
     get: {
       operationId: summary
@@ -103,13 +112,13 @@ function actionOperation(summary: string, description: string, parameters: Param
         "404": errorResponse,
         "500": errorResponse,
       },
-      security: [{ canvasOAuth: ["canvas.read"] }],
+      ...(options.includeOAuthSecurity ? { security: [{ canvasOAuth: ["canvas.read"] }] } : {}),
       "x-openai-isConsequential": false,
     },
   };
 }
 
-export function getActionsOpenApiDocument(origin: string) {
+export function getActionsOpenApiDocument(origin: string, options: OpenApiOptions = {}) {
   const baseUrl = origin.replace(/\/+$/, "");
 
   return {
@@ -124,90 +133,113 @@ export function getActionsOpenApiDocument(origin: string) {
       [`${API_PREFIX}/health`]: actionOperation(
         "getCanvasHealth",
         "Check whether the connected Canvas credentials can reach Canvas.",
+        [],
+        options,
       ),
       [`${API_PREFIX}/profile`]: actionOperation(
         "getCanvasProfile",
         "Get the current user's Canvas profile.",
+        [],
+        options,
       ),
       [`${API_PREFIX}/courses`]: actionOperation(
         "listCanvasCourses",
         "List Canvas courses available to the current user.",
         [includeEndedParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}`]: actionOperation(
         "getCanvasCourse",
         "Get details for one Canvas course.",
         [courseIdParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/assignments`]: actionOperation(
         "listCanvasAssignments",
         "List assignments for one Canvas course.",
         [courseIdParam, includeSubmissionsParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/assignments/{assignment_id}`]: actionOperation(
         "getCanvasAssignment",
         "Get details for one Canvas assignment.",
         [courseIdParam, assignmentIdParam, includeSubmissionParam],
+        options,
       ),
       [`${API_PREFIX}/upcoming-assignments`]: actionOperation(
         "getCanvasUpcomingAssignments",
         "Get upcoming Canvas assignment due dates.",
         [limitParam],
+        options,
       ),
       [`${API_PREFIX}/dashboard`]: actionOperation(
         "getCanvasDashboard",
         "Get the current user's Canvas dashboard.",
+        [],
+        options,
       ),
       [`${API_PREFIX}/dashboard-cards`]: actionOperation(
         "getCanvasDashboardCards",
         "Get Canvas dashboard cards for active courses.",
+        [],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/grades`]: actionOperation(
         "getCanvasCourseGrades",
         "Get enrollment and grade data for one Canvas course.",
         [courseIdParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/modules`]: actionOperation(
         "listCanvasModules",
         "List modules for one Canvas course.",
         [courseIdParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/modules/{module_id}/items`]: actionOperation(
         "listCanvasModuleItems",
         "List items inside one Canvas module.",
         [courseIdParam, moduleIdParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/pages`]: actionOperation(
         "listCanvasPages",
         "List wiki pages for one Canvas course.",
         [courseIdParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/pages/{page_url}`]: actionOperation(
         "getCanvasPage",
         "Get one Canvas course page by its page URL slug.",
         [courseIdParam, pageUrlParam],
+        options,
       ),
       [`${API_PREFIX}/courses/{course_id}/files`]: actionOperation(
         "listCanvasFiles",
         "List files for one Canvas course.",
         [courseIdParam],
+        options,
       ),
     },
     components: {
-      securitySchemes: {
-        canvasOAuth: {
-          type: "oauth2",
-          flows: {
-            authorizationCode: {
-              authorizationUrl: `${baseUrl}/authorize`,
-              tokenUrl: `${baseUrl}/token`,
-              scopes: {
-                "canvas.read": "Read Canvas LMS data for the authorized user.",
+      ...(options.includeOAuthSecurity
+        ? {
+            securitySchemes: {
+              canvasOAuth: {
+                type: "oauth2",
+                flows: {
+                  authorizationCode: {
+                    authorizationUrl: `${baseUrl}/authorize`,
+                    tokenUrl: `${baseUrl}/token`,
+                    scopes: {
+                      "canvas.read": "Read Canvas LMS data for the authorized user.",
+                    },
+                  },
+                },
               },
             },
-          },
-        },
-      },
+          }
+        : {}),
       schemas: {
         CanvasDataResponse: {
           type: "object",

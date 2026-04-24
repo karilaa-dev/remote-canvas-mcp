@@ -109,6 +109,8 @@ The same Worker also exposes a GPT Actions REST facade for the ChatGPT Custom GP
 https://<your-worker>.workers.dev/actions/openapi.json
 ```
 
+The default schema intentionally does not include an OpenAPI OAuth security scheme because the ChatGPT Actions editor owns OAuth configuration separately. If you need a schema with OAuth security metadata for another OpenAPI client, use `/actions/openapi-oauth.json`.
+
 ### One-time OAuth client registration
 
 Create one OAuth client for your Custom GPT using the existing dynamic client registration endpoint. Replace `g-YOUR-GPT-ID` after saving the GPT once in ChatGPT:
@@ -141,6 +143,7 @@ In the Custom GPT editor:
 4. Set authorization URL to `https://<your-worker>.workers.dev/authorize`.
 5. Set token URL to `https://<your-worker>.workers.dev/token`.
 6. Set scope to `canvas.read`.
+7. Set the privacy policy URL to `https://<your-worker>.workers.dev/privacy`.
 
 When the GPT first uses an action, ChatGPT will start the OAuth flow. The approval page asks the user for their Canvas domain, Canvas API token, and timezone, then stores the Canvas token encrypted in KV.
 
