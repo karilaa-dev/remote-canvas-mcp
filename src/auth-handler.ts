@@ -15,6 +15,11 @@ type HonoEnv = { Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } };
 
 const app = new Hono<HonoEnv>();
 
+type RedirectUriUpdateBody = {
+  redirect_uri?: unknown;
+  redirect_uris?: unknown;
+};
+
 function getFormString(formData: FormData, field: string): string | null {
   const value = formData.get(field);
   return typeof value === "string" ? value : null;
@@ -26,6 +31,80 @@ function parseEncodedState(encoded: string): { oauthReqInfo?: AuthRequest } | nu
   } catch {
     return null;
   }
+}
+
+function getBearerToken(request: Request): string | null {
+  const header = request.headers.get("Authorization");
+  if (!header) return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] ?? null;
+}
+
+function isAdminAuthorized(request: Request, env: Env): boolean {
+  const expected = env.ACTIONS_ADMIN_TOKEN;
+  if (!expected) return false;
+
+  const actual = getBearerToken(request) ?? request.headers.get("X-Admin-Token");
+  return actual === expected;
+}
+
+function publicClientInfo(client: Awaited<ReturnType<OAuthHelpers["lookupClient"]>>) {
+  if (!client) return null;
+
+  return {
+    client_id: client.clientId,
+    client_name: client.clientName,
+    redirect_uris: client.redirectUris,
+    grant_types: client.grantTypes,
+    response_types: client.responseTypes,
+    token_endpoint_auth_method: client.tokenEndpointAuthMethod,
+  };
+}
+
+function expandChatGptRedirectUri(uri: string): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    throw new OAuthError("invalid_request", `Invalid redirect URI: ${uri}`, 400);
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new OAuthError("invalid_request", "Redirect URI must use https.", 400);
+  }
+
+  if (parsed.hostname !== "chat.openai.com" && parsed.hostname !== "chatgpt.com") {
+    return [uri];
+  }
+
+  const chatOpenAi = new URL(parsed);
+  chatOpenAi.hostname = "chat.openai.com";
+  const chatGpt = new URL(parsed);
+  chatGpt.hostname = "chatgpt.com";
+  return [chatOpenAi.toString(), chatGpt.toString()];
+}
+
+function parseRedirectUris(body: RedirectUriUpdateBody): string[] {
+  const redirectUris = new Set<string>();
+
+  if (typeof body.redirect_uri === "string") {
+    for (const uri of expandChatGptRedirectUri(body.redirect_uri)) redirectUris.add(uri);
+  }
+
+  if (Array.isArray(body.redirect_uris)) {
+    for (const value of body.redirect_uris) {
+      if (typeof value !== "string") {
+        throw new OAuthError("invalid_request", "redirect_uris must contain only strings.", 400);
+      }
+      for (const uri of expandChatGptRedirectUri(value)) redirectUris.add(uri);
+    }
+  }
+
+  if (redirectUris.size === 0) {
+    throw new OAuthError("invalid_request", "Provide redirect_uri or redirect_uris.", 400);
+  }
+
+  return Array.from(redirectUris);
 }
 
 app.get("/authorize", async (c) => {
@@ -105,6 +184,49 @@ app.post("/authorize", async (c) => {
 app.get("/actions/openapi.json", (c) => {
   const origin = new URL(c.req.url).origin;
   return c.json(getActionsOpenApiDocument(origin));
+});
+
+app.get("/admin/oauth-clients/:client_id", async (c) => {
+  if (!isAdminAuthorized(c.req.raw, c.env)) {
+    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+  }
+
+  const client = await c.env.OAUTH_PROVIDER.lookupClient(c.req.param("client_id"));
+  if (!client) {
+    return c.json({ error: "not_found", message: "OAuth client was not found.", status: 404 }, 404);
+  }
+
+  return c.json(publicClientInfo(client));
+});
+
+app.post("/admin/oauth-clients/:client_id/redirect-uris", async (c) => {
+  try {
+    if (!isAdminAuthorized(c.req.raw, c.env)) {
+      return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+    }
+
+    const clientId = c.req.param("client_id");
+    const existingClient = await c.env.OAUTH_PROVIDER.lookupClient(clientId);
+    if (!existingClient) {
+      return c.json({ error: "not_found", message: "OAuth client was not found.", status: 404 }, 404);
+    }
+
+    const body = await c.req.json<RedirectUriUpdateBody>();
+    const redirectUris = parseRedirectUris(body);
+    const updatedClient = await c.env.OAUTH_PROVIDER.updateClient(clientId, { redirectUris });
+    if (!updatedClient) {
+      return c.json({ error: "not_found", message: "OAuth client was not found.", status: 404 }, 404);
+    }
+
+    return c.json(publicClientInfo(updatedClient));
+  } catch (error: unknown) {
+    if (error instanceof OAuthError) return error.toResponse();
+    return c.json({
+      error: "invalid_request",
+      message: error instanceof Error ? error.message : String(error),
+      status: 400,
+    }, 400);
+  }
 });
 
 export { app as AuthHandler };

@@ -144,6 +144,32 @@ When the GPT first uses an action, ChatGPT will start the OAuth flow. The approv
 
 The Actions API is read-only and available under `/actions/api/*`. It exposes focused endpoints for health, profile, courses, assignments, upcoming assignments, dashboard cards, course grades, modules, pages, and files.
 
+### Updating a changing ChatGPT callback URL
+
+If ChatGPT changes the OAuth callback URL after you enter the client ID and secret, update the existing OAuth client instead of registering a new one. First set an admin token:
+
+```bash
+npx wrangler secret put ACTIONS_ADMIN_TOKEN
+```
+
+Then update the client with the latest callback URL shown by ChatGPT:
+
+```bash
+curl -sS https://<your-worker>.workers.dev/admin/oauth-clients/<client_id>/redirect-uris \
+  -H 'Authorization: Bearer <your-admin-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "redirect_uri": "https://chat.openai.com/aip/g-YOUR-GPT-ID/oauth/callback"
+  }'
+```
+
+For ChatGPT callbacks, the admin endpoint stores both `chat.openai.com` and `chatgpt.com` callback host variants for the same path. You can inspect the current client registration with:
+
+```bash
+curl -sS https://<your-worker>.workers.dev/admin/oauth-clients/<client_id> \
+  -H 'Authorization: Bearer <your-admin-token>'
+```
+
 ## Available tools
 
 Only read-only Canvas tools are registered. Tools that create, update, submit, post, enroll, start attempts, mark items complete, or generate reports are not exposed.

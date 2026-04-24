@@ -27,5 +27,6 @@
   ],
   // Secrets (set via `npx wrangler secret put`):
   //   COOKIE_ENCRYPTION_KEY     — required (used for cookie signing + credential encryption)
+  //   ACTIONS_ADMIN_TOKEN       — required for protected OAuth client admin endpoints
   // Per-user Canvas credentials are collected via the approval form and stored encrypted in KV.
 }
