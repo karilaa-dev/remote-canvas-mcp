@@ -110,8 +110,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
         <input id="newClientName" value="Canvas LMS Custom GPT">
       </div>
       <div class="section hidden" data-view="create">
-        <label for="newClientRedirect">Callback URL</label>
-        <textarea id="newClientRedirect" placeholder="https://chat.openai.com/aip/g-.../oauth/callback"></textarea>
+        <label for="newClientRedirect">Callback URL (optional)</label>
+        <textarea id="newClientRedirect" placeholder="Leave empty, or paste https://chat.openai.com/aip/g-.../oauth/callback"></textarea>
       </div>
       <div class="section hidden" data-view="create">
         <label for="newClientAuth">Token auth method</label>
@@ -315,16 +315,16 @@ async function updateRedirects() {
 async function createClient() {
   const clientName = $("newClientName").value.trim() || "Canvas LMS Custom GPT";
   const redirectUri = $("newClientRedirect").value.trim();
-  if (!redirectUri) throw new Error("Paste a callback URL first.");
   setStatus("Creating client...");
+  const body = {
+    client_name: clientName,
+    token_endpoint_auth_method: $("newClientAuth").value,
+  };
+  if (redirectUri) body.redirect_uri = redirectUri;
   const created = await api("/admin/oauth-clients", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_name: clientName,
-      redirect_uri: redirectUri,
-      token_endpoint_auth_method: $("newClientAuth").value,
-    }),
+    body: JSON.stringify(body),
   });
   clients = sortedClients([...clients.filter((client) => client.client_id !== created.client_id), created]);
   selectedClientId = created.client_id;

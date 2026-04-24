@@ -118,6 +118,27 @@ test("admin can create a Custom GPT OAuth client", async () => {
   });
 });
 
+test("admin can create a Custom GPT OAuth client before ChatGPT provides a callback", async () => {
+  const response = await AuthHandler.request(
+    "/admin/oauth-clients",
+    {
+      body: JSON.stringify({
+        client_name: "Canvas LMS Custom GPT",
+        token_endpoint_auth_method: "client_secret_post",
+      }),
+      headers: {
+        Authorization: "Bearer admin-secret",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+    createEnv(),
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal((await response.json() as { redirect_uris: string[] }).redirect_uris[0], "https://canvas-mcp.invalid/oauth/callback-placeholder");
+});
+
 test("admin can delete multiple clients", async () => {
   const response = await AuthHandler.request(
     "/admin/oauth-clients/delete",

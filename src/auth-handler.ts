@@ -30,6 +30,8 @@ type ClientDeleteBody = {
   client_ids?: unknown;
 };
 
+const PLACEHOLDER_REDIRECT_URI = "https://canvas-mcp.invalid/oauth/callback-placeholder";
+
 function getFormString(formData: FormData, field: string): string | null {
   const value = formData.get(field);
   return typeof value === "string" ? value : null;
@@ -419,6 +421,17 @@ function parseRedirectUris(body: RedirectUriUpdateBody): string[] {
   return Array.from(redirectUris);
 }
 
+function parseRedirectUrisOrPlaceholder(body: RedirectUriUpdateBody): string[] {
+  try {
+    return parseRedirectUris(body);
+  } catch (error) {
+    if (error instanceof OAuthError && error.code === "invalid_request") {
+      return [PLACEHOLDER_REDIRECT_URI];
+    }
+    throw error;
+  }
+}
+
 app.get("/authorize", async (c) => {
   try {
     const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
@@ -522,7 +535,7 @@ app.post("/admin/oauth-clients", async (c) => {
     const clientName = typeof body.client_name === "string" && body.client_name.trim()
       ? body.client_name.trim()
       : "Canvas LMS Custom GPT";
-    const redirectUris = parseRedirectUris(body);
+    const redirectUris = parseRedirectUrisOrPlaceholder(body);
     const tokenEndpointAuthMethod = parseTokenEndpointAuthMethod(body.token_endpoint_auth_method);
     const client = await c.env.OAUTH_PROVIDER.createClient({
       clientName,
