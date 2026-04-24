@@ -55,6 +55,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .uri-list li{background:#0d0f0e;border:1px solid var(--line);border-radius:6px;padding:9px 10px;overflow-wrap:anywhere}
 .secret-box{display:grid;gap:8px;background:#101311;border:1px solid var(--warn);border-radius:8px;padding:12px;margin-top:12px}
 .secret-box code{overflow-wrap:anywhere;color:#ffe0a1}
+.events{display:grid;gap:8px;max-height:280px;overflow:auto}
+.event{background:#101311;border:1px solid var(--line);border-radius:6px;padding:10px;display:grid;gap:4px}
+.event strong{font-size:12px}
+.event span{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .hidden{display:none!important}
 .empty{color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:6px}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -152,6 +156,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
         <div class="row" style="margin-top:10px">
           <button class="button primary" id="updateRedirects">Update selected client redirects</button>
         </div>
+      </div>
+      <div class="section">
+        <div class="toolbar">
+          <label style="margin:0">Recent OAuth events</label>
+          <button class="button" id="refreshEvents">Refresh events</button>
+        </div>
+        <div class="events" id="oauthEvents" style="margin-top:10px"></div>
       </div>
     </section>
   </section>
@@ -297,6 +308,37 @@ async function refreshClients(keepSelection = true) {
   renderClientList();
   setStatus("Clients loaded", "ok");
 }
+async function refreshEvents() {
+  const data = await api("/admin/oauth-events");
+  const events = data.events || [];
+  const box = $("oauthEvents");
+  box.innerHTML = "";
+  if (!events.length) {
+    box.innerHTML = '<div class="empty">No OAuth events in the last 6 hours.</div>';
+    return;
+  }
+  for (const event of events) {
+    const row = document.createElement("div");
+    row.className = "event";
+    const title = document.createElement("strong");
+    title.textContent = [event.timestamp, event.phase, event.status].filter(Boolean).join(" | ");
+    const details = document.createElement("span");
+    details.textContent = [
+      event.client_id ? "client=" + event.client_id : "",
+      event.auth_method ? "auth=" + event.auth_method : "",
+      event.grant_type ? "grant=" + event.grant_type : "",
+      event.has_redirect_uri === false ? "missing redirect_uri" : "",
+      event.has_code_verifier ? "has code_verifier" : "",
+      event.redirect_host ? "redirect=" + event.redirect_host + event.redirect_path : "",
+      event.token_type ? "token_type=" + event.token_type : "",
+    ].filter(Boolean).join(" | ");
+    const error = document.createElement("span");
+    error.textContent = event.error || event.error_description || event.message || "";
+    row.append(title, details);
+    if (error.textContent) row.appendChild(error);
+    box.appendChild(row);
+  }
+}
 async function updateRedirects() {
   if (!selectedClientId) throw new Error("Select a client first.");
   const redirectUri = newRedirect.value.trim();
@@ -379,12 +421,14 @@ $("updateRedirects").addEventListener("click", () => updateRedirects().catch((er
 $("createClient").addEventListener("click", () => createClient().catch((error) => setStatus(error.message, "error")));
 $("deleteSelected").addEventListener("click", () => deleteSelected().catch((error) => setStatus(error.message, "error")));
 $("selectVisible").addEventListener("click", () => { for (const client of visibleClients()) selected.add(client.client_id); renderClientList(); });
+$("refreshEvents").addEventListener("click", () => refreshEvents().catch((error) => setStatus(error.message, "error")));
 filter.addEventListener("input", renderClientList);
 tokenInput.addEventListener("keydown", (event) => { if (event.key === "Enter") $("saveToken").click(); });
 document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
 if (getToken()) {
   showApp();
   refreshClients(false).catch((error) => setStatus(error.message, "error"));
+  refreshEvents().catch(() => {});
 } else {
   showLogin();
 }

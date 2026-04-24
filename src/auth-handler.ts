@@ -32,6 +32,26 @@ type ClientDeleteBody = {
 
 const PLACEHOLDER_REDIRECT_URI = "https://canvas-mcp.invalid/oauth/callback-placeholder";
 const AUTH_CODE_REDIRECT_PREFIX = "oauth:auth-code-redirect:";
+const OAUTH_EVENT_PREFIX = "oauth:event:";
+
+type OAuthEvent = {
+  auth_method?: string;
+  body_keys?: string[];
+  client_id?: string;
+  error?: string;
+  error_description?: string;
+  grant_type?: string | null;
+  has_code_verifier?: boolean;
+  has_redirect_uri?: boolean;
+  id?: string;
+  message?: string;
+  phase: "authorize" | "token";
+  redirect_host?: string;
+  redirect_path?: string;
+  status: number;
+  timestamp?: string;
+  token_type?: string;
+};
 
 type TokenEndpointProvider = {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => Promise<Response>;
@@ -78,6 +98,73 @@ function authCodeRedirectKey(code: string): string | null {
   const [userId, grantId] = code.split(":");
   if (!userId || !grantId) return null;
   return `${AUTH_CODE_REDIRECT_PREFIX}${userId}:${grantId}`;
+}
+
+function oauthEventKey(timestamp: string, id: string): string {
+  return `${OAUTH_EVENT_PREFIX}${timestamp}:${id}`;
+}
+
+function summarizeRedirectUri(redirectUri: string | undefined): Pick<OAuthEvent, "redirect_host" | "redirect_path"> {
+  if (!redirectUri) return {};
+  try {
+    const url = new URL(redirectUri);
+    return { redirect_host: url.host, redirect_path: url.pathname };
+  } catch {
+    return {};
+  }
+}
+
+function parseBasicClientId(authHeader: string | null): string | undefined {
+  if (!authHeader?.startsWith("Basic ")) return undefined;
+  try {
+    const [id] = atob(authHeader.substring(6)).split(":", 2);
+    return decodeURIComponent(id);
+  } catch {
+    return undefined;
+  }
+}
+
+function summarizeTokenRequest(bodyText: string, request: Request): OAuthEvent {
+  const params = new URLSearchParams(bodyText);
+  const authClientId = parseBasicClientId(request.headers.get("Authorization"));
+  return {
+    auth_method: authClientId ? "client_secret_basic" : "client_secret_post",
+    body_keys: Array.from(new Set(Array.from(params.keys()))).filter((key) => key !== "client_secret" && key !== "code"),
+    client_id: authClientId ?? params.get("client_id") ?? undefined,
+    grant_type: params.get("grant_type"),
+    has_code_verifier: params.has("code_verifier"),
+    has_redirect_uri: params.has("redirect_uri"),
+    phase: "token",
+    status: 0,
+  };
+}
+
+async function recordOAuthEvent(env: Env, event: OAuthEvent): Promise<void> {
+  try {
+    const timestamp = new Date().toISOString();
+    const id = crypto.randomUUID();
+    await env.OAUTH_KV.put(oauthEventKey(timestamp, id), JSON.stringify({ ...event, id, timestamp }), {
+      expirationTtl: 60 * 60 * 6,
+    });
+  } catch {
+    // Diagnostics must never break OAuth.
+  }
+}
+
+async function listOAuthEvents(kv: KVNamespace): Promise<OAuthEvent[]> {
+  const listed = await kv.list({ prefix: OAUTH_EVENT_PREFIX, limit: 50 });
+  const events = await Promise.all(
+    listed.keys.map(async (key) => {
+      try {
+        return await kv.get<OAuthEvent>(key.name, { type: "json" });
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return events.filter((event): event is OAuthEvent => Boolean(event)).sort((a, b) =>
+    (b.timestamp ?? "").localeCompare(a.timestamp ?? ""),
+  );
 }
 
 function getBearerToken(request: Request): string | null {
@@ -167,6 +254,42 @@ export async function tokenBodyWithStoredRedirectUri(bodyText: string, kv: KVNam
 
   params.set("redirect_uri", redirectUri);
   return params.toString();
+}
+
+async function tokenResponseWithDiagnostics(
+  response: Response,
+  env: Env,
+  requestSummary: OAuthEvent,
+): Promise<Response> {
+  const headers = new Headers(response.headers);
+  headers.delete("Content-Length");
+  const text = await response.text();
+  let json: Record<string, unknown> | null = null;
+
+  try {
+    json = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    json = null;
+  }
+
+  if (json && typeof json.token_type === "string" && json.token_type.toLowerCase() === "bearer") {
+    json.token_type = "Bearer";
+  }
+
+  await recordOAuthEvent(env, {
+    ...requestSummary,
+    error: typeof json?.error === "string" ? json.error : undefined,
+    error_description: typeof json?.error_description === "string" ? json.error_description : undefined,
+    status: response.status,
+    token_type: typeof json?.token_type === "string" ? json.token_type : undefined,
+  });
+
+  if (json) {
+    headers.set("Content-Type", "application/json");
+    return new Response(JSON.stringify(json), { headers, status: response.status, statusText: response.statusText });
+  }
+
+  return new Response(text, { headers, status: response.status, statusText: response.statusText });
 }
 
 function renderAdminPage(): Response {
@@ -556,17 +679,31 @@ app.post("/authorize", async (c) => {
       await c.env.OAUTH_KV.put(key, state.oauthReqInfo.redirectUri, { expirationTtl: 600 });
     }
 
+    await recordOAuthEvent(c.env, {
+      client_id: state.oauthReqInfo.clientId,
+      phase: "authorize",
+      status: 302,
+      ...summarizeRedirectUri(state.oauthReqInfo.redirectUri),
+    });
+
     const headers = new Headers({ Location: redirectTo });
     headers.append("Set-Cookie", approvedClientCookie);
     return new Response(null, { status: 302, headers });
   } catch (error: unknown) {
     if (error instanceof OAuthError) return error.toResponse();
+    await recordOAuthEvent(c.env, {
+      message: error instanceof Error ? error.message : String(error),
+      phase: "authorize",
+      status: 500,
+    });
     return c.text(`Internal server error: ${error instanceof Error ? error.message : String(error)}`, 500);
   }
 });
 
 app.post("/token", async (c) => {
-  const body = await tokenBodyWithStoredRedirectUri(await c.req.raw.text(), c.env.OAUTH_KV);
+  const originalBody = await c.req.raw.text();
+  const body = await tokenBodyWithStoredRedirectUri(originalBody, c.env.OAUTH_KV);
+  const requestSummary = summarizeTokenRequest(body, c.req.raw);
   const url = new URL(c.req.url);
   url.pathname = "/oauth/token";
 
@@ -575,11 +712,12 @@ app.post("/token", async (c) => {
   headers.delete("Content-Length");
 
   const provider = await getTokenEndpointProvider();
-  return provider.fetch(new Request(url.toString(), {
+  const response = await provider.fetch(new Request(url.toString(), {
     body,
     headers,
     method: "POST",
   }), c.env, c.executionCtx);
+  return tokenResponseWithDiagnostics(response, c.env, requestSummary);
 });
 
 app.get("/actions/openapi.json", (c) => {
@@ -599,6 +737,14 @@ app.get("/admin/oauth-clients", async (c) => {
     clients: sortPublicClients(clients.items.map(publicClientInfo)),
     cursor: clients.cursor,
   });
+});
+
+app.get("/admin/oauth-events", async (c) => {
+  if (!isAdminAuthorized(c.req.raw, c.env)) {
+    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+  }
+
+  return c.json({ events: await listOAuthEvents(c.env.OAUTH_KV) });
 });
 
 app.post("/admin/oauth-clients", async (c) => {
