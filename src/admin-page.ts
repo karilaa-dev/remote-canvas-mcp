@@ -397,9 +397,20 @@ async function refreshEvents() {
 async function selfTestExchange(eventId) {
   if (!confirm("This consumes the authorization code from this failed login. Continue?")) return;
   setStatus("Testing token exchange...");
-  const result = await api("/admin/oauth-events/" + encodeURIComponent(eventId) + "/exchange-code", { method: "POST" });
-  await refreshEvents();
-  setStatus("Token exchange self-test: HTTP " + result.status, result.status >= 200 && result.status < 300 ? "ok" : "error");
+  let result = {};
+  let ok = false;
+  try {
+    const response = await fetch("/admin/oauth-events/" + encodeURIComponent(eventId) + "/exchange-code", {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    ok = response.ok;
+    result = await response.json().catch(() => ({ status: response.status, response: "Non-JSON response" }));
+  } finally {
+    await refreshEvents();
+  }
+  const status = typeof result.status === "number" ? result.status : "unknown";
+  setStatus("Token exchange self-test: HTTP " + status, ok ? "ok" : "error");
   alert(JSON.stringify(result, null, 2));
 }
 async function clearEvents() {
