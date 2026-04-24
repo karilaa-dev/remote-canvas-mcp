@@ -25,9 +25,6 @@
       "id": "0e6d0c730e10403b90c44bc81fc266ab",
     },
   ],
-  "version_metadata": {
-    "binding": "VERSION_METADATA",
-  },
   // Secrets (set via `npx wrangler secret put`):
   //   COOKIE_ENCRYPTION_KEY     — required (used for cookie signing + credential encryption)
   //   ACTIONS_ADMIN_TOKEN       — required for protected OAuth client admin endpoints

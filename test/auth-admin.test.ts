@@ -20,12 +20,6 @@ function createEnv(client: ClientInfo | null = baseClient): Env & { OAUTH_PROVID
     COOKIE_ENCRYPTION_KEY: "cookie-secret",
     MCP_OBJECT: {} as Env["MCP_OBJECT"],
     OAUTH_KV: {} as Env["OAUTH_KV"],
-    SOURCE_COMMIT: "test",
-    VERSION_METADATA: {
-      id: "version-test",
-      tag: "test",
-      timestamp: "2026-04-24T00:00:00.000Z",
-    },
     OAUTH_PROVIDER: {
       listClients: async () => ({
         items: clients,

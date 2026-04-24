@@ -30,62 +30,10 @@ type ClientDeleteBody = {
   client_ids?: unknown;
 };
 
-type TokenExchangeSelfTestBody = {
-  client_secret?: unknown;
-};
-
 const PLACEHOLDER_REDIRECT_URI = "https://canvas-mcp.invalid/oauth/callback-placeholder";
 const AUTH_CODE_ALIAS_PREFIX = "oauth:auth-code-alias:";
 const AUTH_CODE_REDIRECT_PREFIX = "oauth:auth-code-redirect:";
 const INTERNAL_TOKEN_ENDPOINT = "/_oauth/internal-token";
-const OAUTH_EVENT_PREFIX = "oauth:event:";
-
-type OAuthEvent = {
-  access_control_request_headers?: string;
-  access_control_request_method?: string;
-  auth_method?: string;
-  authorization_code?: string;
-  body_keys?: string[];
-  callback_query_keys?: string[];
-  client_id?: string;
-  code_has_colon?: boolean;
-  code_length?: number;
-  code_challenge_method?: string;
-  error?: string;
-  error_description?: string;
-  grant_type?: string | null;
-  has_code_challenge?: boolean;
-  has_code_verifier?: boolean;
-  has_resource?: boolean;
-  has_redirect_uri?: boolean;
-  id?: string;
-  message?: string;
-  origin_host?: string;
-  phase: "authorize_request" | "authorize" | "token" | "token_preflight";
-  request_query_keys?: string[];
-  redirect_host?: string;
-  redirect_path?: string;
-  redirect_uri?: string;
-  rewritten_from?: string;
-  response_type?: string;
-  scope?: string;
-  status: number;
-  completion_mode?: OAuthCompletionMode;
-  callback_state_hash?: string;
-  state_hash?: string;
-  state_length?: number;
-  timestamp?: string;
-  token_type?: string;
-};
-
-type RuntimeInfo = {
-  source_commit: string;
-  worker_version_id?: string;
-  worker_version_tag?: string;
-  worker_version_timestamp?: string;
-};
-
-type OAuthCompletionMode = "redirect";
 
 type TokenEndpointProvider = {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => Promise<Response>;
@@ -142,41 +90,6 @@ function createAuthCodeAlias(): string {
   return crypto.randomUUID().replaceAll("-", "");
 }
 
-function oauthEventKey(timestamp: string, id: string): string {
-  return `${OAUTH_EVENT_PREFIX}${timestamp}:${id}`;
-}
-
-function summarizeRedirectUri(redirectUri: string | undefined): Pick<OAuthEvent, "redirect_host" | "redirect_path"> {
-  if (!redirectUri) return {};
-  try {
-    const url = new URL(redirectUri);
-    return { redirect_host: url.host, redirect_path: url.pathname };
-  } catch {
-    return {};
-  }
-}
-
-function summarizeCallbackRedirect(redirectTo: string): Pick<
-  OAuthEvent,
-  "callback_query_keys" | "code_has_colon" | "code_length" | "redirect_host" | "redirect_path" | "state_length"
-> {
-  try {
-    const url = new URL(redirectTo);
-    const code = url.searchParams.get("code") ?? "";
-    const state = url.searchParams.get("state") ?? "";
-    return {
-      callback_query_keys: Array.from(new Set(Array.from(url.searchParams.keys()))),
-      code_has_colon: code.includes(":"),
-      code_length: code.length,
-      redirect_host: url.host,
-      redirect_path: url.pathname,
-      state_length: state.length,
-    };
-  } catch {
-    return {};
-  }
-}
-
 function normalizeCallbackQueryOrder(redirectTo: string): string {
   try {
     const url = new URL(redirectTo);
@@ -193,43 +106,6 @@ function normalizeCallbackQueryOrder(redirectTo: string): string {
   }
 }
 
-async function hashDiagnosticValue(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest))
-    .slice(0, 8)
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function summarizeAuthorizeRequest(request: Request, oauthReqInfo: AuthRequest): Promise<OAuthEvent> {
-  const url = new URL(request.url);
-  return {
-    client_id: oauthReqInfo.clientId,
-    code_challenge_method: oauthReqInfo.codeChallengeMethod,
-    has_code_challenge: Boolean(oauthReqInfo.codeChallenge),
-    has_redirect_uri: Boolean(oauthReqInfo.redirectUri),
-    has_resource: Boolean(oauthReqInfo.resource),
-    phase: "authorize_request",
-    request_query_keys: Array.from(new Set(Array.from(url.searchParams.keys()))),
-    response_type: oauthReqInfo.responseType,
-    scope: oauthReqInfo.scope.join(" "),
-    state_hash: await hashDiagnosticValue(oauthReqInfo.state),
-    state_length: oauthReqInfo.state.length,
-    status: 200,
-    ...summarizeRedirectUri(oauthReqInfo.redirectUri),
-  };
-}
-
-function parseBasicClientId(authHeader: string | null): string | undefined {
-  if (!authHeader?.startsWith("Basic ")) return undefined;
-  try {
-    const [id] = atob(authHeader.substring(6)).split(":", 2);
-    return decodeURIComponent(id);
-  } catch {
-    return undefined;
-  }
-}
-
 function addTokenCorsHeaders(headers: Headers, request: Request): Headers {
   const origin = request.headers.get("Origin");
   headers.set("Access-Control-Allow-Origin", origin || "*");
@@ -241,91 +117,6 @@ function addTokenCorsHeaders(headers: Headers, request: Request): Headers {
   headers.set("Access-Control-Max-Age", "600");
   headers.set("Vary", "Origin, Access-Control-Request-Headers");
   return headers;
-}
-
-function getOriginHost(request: Request): string | undefined {
-  const origin = request.headers.get("Origin");
-  if (!origin) return undefined;
-  try {
-    return new URL(origin).host;
-  } catch {
-    return undefined;
-  }
-}
-
-function summarizeTokenRequest(bodyText: string, request: Request): OAuthEvent {
-  const params = new URLSearchParams(bodyText);
-  const authClientId = parseBasicClientId(request.headers.get("Authorization"));
-  return {
-    auth_method: authClientId ? "client_secret_basic" : "client_secret_post",
-    body_keys: Array.from(new Set(Array.from(params.keys()))).filter((key) => key !== "client_secret" && key !== "code"),
-    client_id: authClientId ?? params.get("client_id") ?? undefined,
-    grant_type: params.get("grant_type"),
-    has_code_verifier: params.has("code_verifier"),
-    has_redirect_uri: params.has("redirect_uri"),
-    origin_host: getOriginHost(request),
-    phase: "token",
-    status: 0,
-  };
-}
-
-function getRuntimeInfo(env: Env): RuntimeInfo {
-  return {
-    source_commit: env.SOURCE_COMMIT ?? "not injected",
-    worker_version_id: env.VERSION_METADATA?.id,
-    worker_version_tag: env.VERSION_METADATA?.tag,
-    worker_version_timestamp: env.VERSION_METADATA?.timestamp,
-  };
-}
-
-async function recordOAuthEvent(env: Env, event: OAuthEvent): Promise<void> {
-  try {
-    const timestamp = new Date().toISOString();
-    const id = crypto.randomUUID();
-    await env.OAUTH_KV.put(oauthEventKey(timestamp, id), JSON.stringify({ ...event, id, timestamp }), {
-      expirationTtl: 60 * 60 * 6,
-    });
-  } catch {
-    // Diagnostics must never break OAuth.
-  }
-}
-
-async function listOAuthEvents(kv: KVNamespace): Promise<OAuthEvent[]> {
-  const listed = await kv.list({ prefix: OAUTH_EVENT_PREFIX, limit: 50 });
-  const events = await Promise.all(
-    listed.keys.map(async (key) => {
-      try {
-        return await kv.get<OAuthEvent>(key.name, { type: "json" });
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return events.filter((event): event is OAuthEvent => Boolean(event)).sort((a, b) =>
-    (b.timestamp ?? "").localeCompare(a.timestamp ?? ""),
-  );
-}
-
-async function getOAuthEvent(kv: KVNamespace, id: string): Promise<OAuthEvent | null> {
-  const events = await listOAuthEvents(kv);
-  return events.find((event) => event.id === id) ?? null;
-}
-
-function publicOAuthEvent(event: OAuthEvent): OAuthEvent {
-  const { authorization_code: _authorizationCode, redirect_uri: _redirectUri, ...publicEvent } = event;
-  return publicEvent;
-}
-
-async function clearOAuthEvents(kv: KVNamespace): Promise<number> {
-  let deleted = 0;
-  let cursor: string | undefined;
-  do {
-    const listed = await kv.list({ prefix: OAUTH_EVENT_PREFIX, cursor, limit: 100 });
-    await Promise.all(listed.keys.map((key) => kv.delete(key.name)));
-    deleted += listed.keys.length;
-    cursor = listed.list_complete ? undefined : listed.cursor;
-  } while (cursor);
-  return deleted;
 }
 
 function getBearerToken(request: Request): string | null {
@@ -382,39 +173,6 @@ function clientCreationResponse(client: ClientInfo, origin: string) {
     chatgpt_setup: getChatGptSetupInfo(origin, client.tokenEndpointAuthMethod),
     client_secret: client.clientSecret,
   };
-}
-
-function callbackHostWasPreserved(event: OAuthEvent): boolean | undefined {
-  if (!event.redirect_uri || !event.redirect_host) return undefined;
-  try {
-    return new URL(event.redirect_uri).host === event.redirect_host;
-  } catch {
-    return undefined;
-  }
-}
-
-function redirectUriIsRegistered(client: ClientInfo, redirectUri: string | undefined): boolean | undefined {
-  if (!redirectUri) return undefined;
-  return client.redirectUris?.some((uri) => uri === redirectUri || areChatGptCallbackHostVariants(uri, redirectUri)) ?? false;
-}
-
-function selfTestNextAction(response: Response, body: Record<string, unknown> | null): string {
-  if (response.ok) {
-    return "Token exchange works with the pasted client secret. If ChatGPT still shows an error and no token event appears, the failure is on ChatGPT's callback/resume step before it calls /token. Recreate the Action auth settings from the config block and run the sign-in again.";
-  }
-
-  const error = typeof body?.error === "string" ? body.error : "";
-  const description = typeof body?.error_description === "string" ? body.error_description : "";
-  if (error === "invalid_client" || description.includes("client_secret")) {
-    return "Client authentication failed. Use the exact client secret from the client creation result, or create a new client because existing secrets cannot be viewed later.";
-  }
-  if (error === "invalid_grant") {
-    return "The authorization code was already used or expired. Start a fresh ChatGPT sign-in and run this self-test only on the newest authorize event.";
-  }
-  if (error === "invalid_request") {
-    return "The token request shape was rejected. Check that ChatGPT uses the listed token URL, client ID, scope, and token exchange method.";
-  }
-  return "Token exchange failed. Compare the token_response, token_request_sent, and chatgpt_oauth_config blocks below.";
 }
 
 function sortPublicClients<T extends { client_id?: string; client_name?: string } | null>(clients: T[]): T[] {
@@ -486,12 +244,7 @@ function areChatGptCallbackHostVariants(left: string, right: string): boolean {
   }
 }
 
-async function tokenResponseWithDiagnostics(
-  response: Response,
-  env: Env,
-  requestSummary: OAuthEvent,
-  request: Request,
-): Promise<Response> {
+async function normalizeTokenResponse(response: Response, request: Request): Promise<Response> {
   const headers = addTokenCorsHeaders(new Headers(response.headers), request);
   headers.delete("Content-Length");
   const text = await response.text();
@@ -507,279 +260,12 @@ async function tokenResponseWithDiagnostics(
     json.token_type = "bearer";
   }
 
-  await recordOAuthEvent(env, {
-    ...requestSummary,
-    error: typeof json?.error === "string" ? json.error : undefined,
-    error_description: typeof json?.error_description === "string" ? json.error_description : undefined,
-    status: response.status,
-    token_type: typeof json?.token_type === "string" ? json.token_type : undefined,
-  });
-
   if (json) {
     headers.set("Content-Type", "application/json");
     return new Response(JSON.stringify(json), { headers, status: response.status, statusText: response.statusText });
   }
 
   return new Response(text, { headers, status: response.status, statusText: response.statusText });
-}
-
-function renderAdminPage(): Response {
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Canvas OAuth Admin</title>
-<style>
-:root{color-scheme:dark;--bg:#111312;--panel:#191c1b;--panel-2:#202422;--line:#343a37;--text:#f2f5f1;--muted:#9aa39e;--accent:#74d09f;--accent-2:#d2a85b;--danger:#ef7c7c;--radius:8px;--shadow:0 18px 60px rgba(0,0,0,.34)}
-*{box-sizing:border-box}
-body{margin:0;background:radial-gradient(circle at 0 0,rgba(116,208,159,.1),transparent 31rem),linear-gradient(145deg,#0d0f0e,#151816 45%,#101211);color:var(--text);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;min-height:100vh}
-button,input,textarea{font:inherit}
-.shell{max-width:1180px;margin:0 auto;padding:28px}
-.top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:18px}
-.brand{display:grid;gap:4px}
-.eyebrow{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
-h1{font-size:28px;line-height:1.05;margin:0;font-weight:650;letter-spacing:0}
-.status{min-height:22px;color:var(--muted);text-align:right}
-.grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
-.panel{background:linear-gradient(180deg,rgba(255,255,255,.025),transparent),var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
-.section{padding:16px;border-bottom:1px solid var(--line)}
-.section:last-child{border-bottom:0}
-label{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.07em;margin:0 0 7px}
-input,textarea{width:100%;border:1px solid var(--line);background:#0d0f0e;color:var(--text);border-radius:6px;padding:10px 11px;outline:none}
-textarea{min-height:112px;resize:vertical}
-input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(116,208,159,.12)}
-.row{display:flex;gap:8px;align-items:center}
-.row input{min-width:0}
-.button{border:1px solid var(--line);background:var(--panel-2);color:var(--text);border-radius:6px;padding:10px 12px;cursor:pointer;white-space:nowrap}
-.button:hover{border-color:#56615b;background:#252b28}
-.primary{background:var(--accent);border-color:var(--accent);color:#07100b;font-weight:700}
-.primary:hover{background:#88e2b1}
-.danger{color:#ffd0d0;border-color:#604040}
-.list{display:grid;gap:8px;max-height:520px;overflow:auto}
-.client{border:1px solid var(--line);background:#111412;border-radius:6px;padding:10px;text-align:left;cursor:pointer}
-.client:hover,.client.active{border-color:var(--accent);background:#17211b}
-.client strong{display:block;margin-bottom:3px}
-.client span{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis}
-.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 12px;margin:0}
-.meta dt{color:var(--muted)}
-.meta dd{margin:0;overflow-wrap:anywhere}
-.uri-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
-.uri-list li{background:#0d0f0e;border:1px solid var(--line);border-radius:6px;padding:9px 10px;overflow-wrap:anywhere}
-.hidden{display:none!important}
-.empty{color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:6px}
-@media (max-width:820px){.shell{padding:18px}.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.status{text-align:left}.meta{grid-template-columns:1fr}}
-</style>
-</head>
-<body>
-<main class="shell">
-  <header class="top">
-    <div class="brand">
-      <div class="eyebrow">Canvas LMS</div>
-      <h1>OAuth Admin</h1>
-    </div>
-    <div class="status" id="status"></div>
-  </header>
-
-  <section class="panel" id="loginPanel">
-    <div class="section">
-      <label for="token">Admin token</label>
-      <div class="row">
-        <input id="token" type="password" autocomplete="current-password">
-        <button class="button primary" id="saveToken">Login</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="grid hidden" id="appPanel">
-    <aside class="panel">
-      <div class="section">
-        <div class="row">
-          <button class="button primary" id="refreshClients">Refresh</button>
-          <button class="button danger" id="logout">Logout</button>
-        </div>
-      </div>
-      <div class="section">
-        <label for="clientSearch">Client ID</label>
-        <div class="row">
-          <input id="clientSearch" placeholder="lcxWz465JLWtJRjx">
-          <button class="button" id="loadClient">Load</button>
-        </div>
-      </div>
-      <div class="section">
-        <label>Clients</label>
-        <div class="list" id="clientList"></div>
-      </div>
-    </aside>
-
-    <section class="panel">
-      <div class="section">
-        <dl class="meta" id="clientMeta"></dl>
-      </div>
-      <div class="section">
-        <label>Redirect URIs</label>
-        <ul class="uri-list" id="redirectUris"></ul>
-      </div>
-      <div class="section">
-        <label for="newRedirect">Current callback URL</label>
-        <textarea id="newRedirect" placeholder="https://chat.openai.com/aip/g-.../oauth/callback"></textarea>
-        <div class="row" style="margin-top:10px">
-          <button class="button primary" id="updateRedirects">Update redirects</button>
-        </div>
-      </div>
-    </section>
-  </section>
-</main>
-<script>
-const tokenInput = document.getElementById("token");
-const saveToken = document.getElementById("saveToken");
-const loginPanel = document.getElementById("loginPanel");
-const appPanel = document.getElementById("appPanel");
-const statusEl = document.getElementById("status");
-const clientList = document.getElementById("clientList");
-const clientMeta = document.getElementById("clientMeta");
-const redirectUris = document.getElementById("redirectUris");
-const clientSearch = document.getElementById("clientSearch");
-const newRedirect = document.getElementById("newRedirect");
-let selectedClientId = "";
-
-function setStatus(message, tone = "muted") {
-  statusEl.textContent = message;
-  statusEl.style.color = tone === "error" ? "var(--danger)" : tone === "ok" ? "var(--accent)" : "var(--muted)";
-}
-
-function getToken() {
-  return localStorage.getItem("canvasAdminToken") || "";
-}
-
-function authHeaders(extra = {}) {
-  return { ...extra, Authorization: "Bearer " + getToken() };
-}
-
-function showApp() {
-  loginPanel.classList.add("hidden");
-  appPanel.classList.remove("hidden");
-}
-
-function showLogin() {
-  appPanel.classList.add("hidden");
-  loginPanel.classList.remove("hidden");
-}
-
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: authHeaders(options.headers || {}),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || data.error || "Request failed");
-  return data;
-}
-
-function renderClientList(clients) {
-  clientList.innerHTML = "";
-  if (!clients.length) {
-    clientList.innerHTML = '<div class="empty">No clients found.</div>';
-    return;
-  }
-  for (const client of clients) {
-    const button = document.createElement("button");
-    button.className = "client" + (client.client_id === selectedClientId ? " active" : "");
-    button.innerHTML = "<strong></strong><span></span><span></span>";
-    button.querySelector("strong").textContent = client.client_name || "Unnamed client";
-    button.querySelectorAll("span")[0].textContent = client.client_id;
-    button.querySelectorAll("span")[1].textContent = (client.redirect_uris || [])[0] || "No redirect URI";
-    button.addEventListener("click", () => loadClient(client.client_id));
-    clientList.appendChild(button);
-  }
-}
-
-function renderClient(client) {
-  selectedClientId = client.client_id;
-  clientSearch.value = client.client_id;
-  clientMeta.innerHTML = "";
-  for (const [label, value] of [
-    ["Client ID", client.client_id],
-    ["Name", client.client_name || ""],
-    ["Grant types", (client.grant_types || []).join(", ")],
-    ["Response types", (client.response_types || []).join(", ")],
-    ["Token auth", client.token_endpoint_auth_method || ""],
-  ]) {
-    const dt = document.createElement("dt");
-    const dd = document.createElement("dd");
-    dt.textContent = label;
-    dd.textContent = value;
-    clientMeta.append(dt, dd);
-  }
-  redirectUris.innerHTML = "";
-  for (const uri of client.redirect_uris || []) {
-    const li = document.createElement("li");
-    li.textContent = uri;
-    redirectUris.appendChild(li);
-  }
-}
-
-async function refreshClients() {
-  setStatus("Loading clients...");
-  const data = await api("/admin/oauth-clients");
-  renderClientList(data.clients || []);
-  setStatus("Clients loaded", "ok");
-}
-
-async function loadClient(clientId) {
-  if (!clientId) return;
-  setStatus("Loading client...");
-  const client = await api("/admin/oauth-clients/" + encodeURIComponent(clientId));
-  renderClient(client);
-  await refreshClients();
-  setStatus("Client loaded", "ok");
-}
-
-async function updateRedirects() {
-  if (!selectedClientId) throw new Error("Load a client first.");
-  const redirectUri = newRedirect.value.trim();
-  if (!redirectUri) throw new Error("Paste a callback URL first.");
-  setStatus("Updating redirects...");
-  const client = await api("/admin/oauth-clients/" + encodeURIComponent(selectedClientId) + "/redirect-uris", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ redirect_uri: redirectUri }),
-  });
-  newRedirect.value = "";
-  renderClient(client);
-  await refreshClients();
-  setStatus("Redirects updated", "ok");
-}
-
-saveToken.addEventListener("click", async () => {
-  localStorage.setItem("canvasAdminToken", tokenInput.value.trim());
-  showApp();
-  try { await refreshClients(); } catch (error) { setStatus(error.message, "error"); }
-});
-document.getElementById("refreshClients").addEventListener("click", () => refreshClients().catch((error) => setStatus(error.message, "error")));
-document.getElementById("logout").addEventListener("click", () => { localStorage.removeItem("canvasAdminToken"); showLogin(); setStatus(""); });
-document.getElementById("loadClient").addEventListener("click", () => loadClient(clientSearch.value.trim()).catch((error) => setStatus(error.message, "error")));
-document.getElementById("updateRedirects").addEventListener("click", () => updateRedirects().catch((error) => setStatus(error.message, "error")));
-tokenInput.addEventListener("keydown", (event) => { if (event.key === "Enter") saveToken.click(); });
-clientSearch.addEventListener("keydown", (event) => { if (event.key === "Enter") document.getElementById("loadClient").click(); });
-
-if (getToken()) {
-  showApp();
-  refreshClients().catch((error) => setStatus(error.message, "error"));
-} else {
-  showLogin();
-}
-</script>
-</body>
-</html>`;
-
-  return new Response(html, {
-    headers: {
-      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
-      "Content-Type": "text/html; charset=utf-8",
-      "X-Frame-Options": "DENY",
-    },
-  });
 }
 
 function expandChatGptRedirectUri(uri: string): string[] {
@@ -844,7 +330,6 @@ app.get("/authorize", async (c) => {
     const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
     const { clientId } = oauthReqInfo;
     if (!clientId) return c.text("Invalid request: missing client_id", 400);
-    await recordOAuthEvent(c.env, await summarizeAuthorizeRequest(c.req.raw, oauthReqInfo));
 
     const { token: csrfToken, setCookie } = generateCSRFProtection();
 
@@ -918,21 +403,6 @@ app.post("/authorize", async (c) => {
       redirectTo = redirectUrl.toString();
     }
     redirectTo = normalizeCallbackQueryOrder(redirectTo);
-    const callbackState = new URL(redirectTo).searchParams.get("state");
-    const callbackSummary = summarizeCallbackRedirect(redirectTo);
-    const callbackUrl = new URL(redirectTo);
-
-    await recordOAuthEvent(c.env, {
-      authorization_code: callbackUrl.searchParams.get("code") ?? undefined,
-      client_id: state.oauthReqInfo.clientId,
-      callback_state_hash: callbackState ? await hashDiagnosticValue(callbackState) : undefined,
-      completion_mode: "redirect",
-      phase: "authorize",
-      redirect_uri: state.oauthReqInfo.redirectUri,
-      state_hash: await hashDiagnosticValue(state.oauthReqInfo.state),
-      status: 302,
-      ...callbackSummary,
-    });
 
     return new Response(null, {
       headers: {
@@ -944,11 +414,6 @@ app.post("/authorize", async (c) => {
     });
   } catch (error: unknown) {
     if (error instanceof OAuthError) return error.toResponse();
-    await recordOAuthEvent(c.env, {
-      message: error instanceof Error ? error.message : String(error),
-      phase: "authorize",
-      status: 500,
-    });
     return c.text(`Internal server error: ${error instanceof Error ? error.message : String(error)}`, 500);
   }
 });
@@ -956,7 +421,6 @@ app.post("/authorize", async (c) => {
 async function handleTokenRequest(c: Context<HonoEnv>): Promise<Response> {
   const originalBody = await c.req.raw.text();
   const body = await tokenBodyWithStoredRedirectUri(originalBody, c.env.OAUTH_KV);
-  const requestSummary = summarizeTokenRequest(body, c.req.raw);
   const url = new URL(c.req.url);
   url.pathname = INTERNAL_TOKEN_ENDPOINT;
 
@@ -970,170 +434,14 @@ async function handleTokenRequest(c: Context<HonoEnv>): Promise<Response> {
     headers,
     method: "POST",
   }), c.env, c.executionCtx);
-  return tokenResponseWithDiagnostics(response, c.env, requestSummary, c.req.raw);
+  return normalizeTokenResponse(response, c.req.raw);
 }
 
 async function handleTokenPreflight(c: Context<HonoEnv>): Promise<Response> {
-  await recordOAuthEvent(c.env, {
-    access_control_request_headers: c.req.raw.headers.get("Access-Control-Request-Headers") ?? undefined,
-    access_control_request_method: c.req.raw.headers.get("Access-Control-Request-Method") ?? undefined,
-    origin_host: getOriginHost(c.req.raw),
-    phase: "token_preflight",
-    status: 204,
-  });
-
   return new Response(null, {
     headers: addTokenCorsHeaders(new Headers(), c.req.raw),
     status: 204,
   });
-}
-
-function redactedTokenBody(text: string): unknown {
-  try {
-    const json = JSON.parse(text) as Record<string, unknown>;
-    for (const key of ["access_token", "refresh_token", "id_token"]) {
-      if (typeof json[key] === "string") json[key] = "[redacted]";
-    }
-    return json;
-  } catch {
-    return text;
-  }
-}
-
-async function exchangeAuthorizationCodeForDiagnostics(
-  c: Context<HonoEnv>,
-  event: OAuthEvent,
-  providedClientSecret?: string,
-): Promise<Response> {
-  const origin = new URL(c.req.url).origin;
-  if (!event.authorization_code || !event.client_id) {
-    return c.json({
-      error: "invalid_request",
-      message: "Selected OAuth event does not include an exchangeable authorization code.",
-      status: 400,
-    }, 400);
-  }
-
-  const client = await c.env.OAUTH_PROVIDER.lookupClient(event.client_id);
-  if (!client) {
-    return c.json({ error: "not_found", message: "OAuth client was not found.", status: 404 }, 404);
-  }
-
-  const tokenAuthMethod = client.tokenEndpointAuthMethod ?? "client_secret_post";
-  const providerCode = await c.env.OAUTH_KV.get(authCodeAliasKey(event.authorization_code));
-  const redirectStorageKey = authCodeRedirectKey(providerCode ?? event.authorization_code);
-  const storedRedirectUri = redirectStorageKey ? await c.env.OAUTH_KV.get(redirectStorageKey) : null;
-  const params = new URLSearchParams({
-    client_id: event.client_id,
-    code: event.authorization_code,
-    grant_type: "authorization_code",
-  });
-  if (event.redirect_uri) params.set("redirect_uri", event.redirect_uri);
-
-  const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded" });
-  const clientSecret = providedClientSecret;
-
-  if (tokenAuthMethod !== "none" && !clientSecret) {
-    return c.json({
-      consumed_code: false,
-      error: "invalid_request",
-      message: "Paste the client secret for this OAuth client before running the self-test.",
-      chatgpt_oauth_config: {
-        ...getChatGptSetupInfo(origin, tokenAuthMethod),
-        client_id: event.client_id,
-        expected_callback_url: event.redirect_uri,
-      },
-      status: 400,
-    }, 400);
-  }
-
-  if (tokenAuthMethod === "client_secret_basic" && clientSecret) {
-    headers.set(
-      "Authorization",
-      `Basic ${btoa(`${encodeURIComponent(event.client_id)}:${encodeURIComponent(clientSecret)}`)}`,
-    );
-  } else if (tokenAuthMethod !== "none" && clientSecret) {
-    params.set("client_secret", clientSecret);
-  }
-
-  const body = await tokenBodyWithStoredRedirectUri(params.toString(), c.env.OAUTH_KV);
-  const url = new URL(c.req.url);
-  url.pathname = INTERNAL_TOKEN_ENDPOINT;
-
-  const tokenRequest = new Request(url.toString(), {
-    body,
-    headers,
-    method: "POST",
-  });
-  const requestSummary = summarizeTokenRequest(body, tokenRequest);
-  const provider = await getTokenEndpointProvider();
-  const response = await provider.fetch(tokenRequest, c.env, c.executionCtx);
-  const text = await response.text();
-  const redactedBody = redactedTokenBody(text);
-  const tokenJson = typeof redactedBody === "object" && redactedBody !== null ? redactedBody as Record<string, unknown> : null;
-  const queryKeys = event.callback_query_keys ?? [];
-
-  await recordOAuthEvent(c.env, {
-    ...requestSummary,
-    auth_method: `admin_self_test:${requestSummary.auth_method}`,
-    error: typeof tokenJson?.error === "string" ? tokenJson.error : undefined,
-    error_description: typeof tokenJson?.error_description === "string" ? tokenJson.error_description : undefined,
-    message: "Admin OAuth code self-test exchange.",
-    status: response.status,
-    token_type: typeof tokenJson?.token_type === "string" ? tokenJson.token_type : undefined,
-  });
-
-  return c.json({
-    consumed_code: true,
-    verdict: response.ok ? "token_exchange_ok" : "token_exchange_failed",
-    message: "This diagnostic exchange consumes the authorization code. Run the ChatGPT sign-in flow again after testing.",
-    next_action: selfTestNextAction(response, tokenJson),
-    chatgpt_oauth_config: {
-      ...getChatGptSetupInfo(origin, tokenAuthMethod),
-      client_id: event.client_id,
-      expected_callback_url: event.redirect_uri,
-    },
-    client_registration: {
-      client_id: client.clientId,
-      client_name: client.clientName,
-      grant_types: client.grantTypes,
-      redirect_uri_registered: redirectUriIsRegistered(client, event.redirect_uri),
-      redirect_uris: client.redirectUris,
-      response_types: client.responseTypes,
-      token_endpoint_auth_method: tokenAuthMethod,
-    },
-    authorization_callback: {
-      callback_host_preserved: callbackHostWasPreserved(event),
-      callback_query_keys: queryKeys,
-      callback_state_matches_request_state: event.callback_state_hash && event.state_hash
-        ? event.callback_state_hash === event.state_hash
-        : undefined,
-      code_has_colon: event.code_has_colon,
-      code_length: event.code_length,
-      requested_redirect_uri: event.redirect_uri,
-      returned_redirect_host: event.redirect_host,
-      returned_redirect_path: event.redirect_path,
-      state_length: event.state_length,
-    },
-    code_storage: {
-      alias_found: Boolean(providerCode),
-      stored_redirect_found: Boolean(storedRedirectUri),
-      stored_redirect_matches_callback: storedRedirectUri && event.redirect_uri
-        ? storedRedirectUri === event.redirect_uri
-        : undefined,
-    },
-    token_request_sent: {
-      auth_method: requestSummary.auth_method,
-      body_fields: requestSummary.body_keys,
-      client_id: event.client_id,
-      content_type: "application/x-www-form-urlencoded",
-      grant_type: "authorization_code",
-      has_redirect_uri: requestSummary.has_redirect_uri,
-      token_url: `${origin}/token`,
-    },
-    token_response: redactedBody,
-    status: response.status,
-  }, response.ok ? 200 : 400);
 }
 
 app.options("/token", handleTokenPreflight);
@@ -1181,7 +489,7 @@ code{background:#eef2f7;border-radius:4px;padding:1px 4px}
 <h2>Sharing</h2>
 <p>The server does not sell user data. Canvas data is returned to ChatGPT only when the authorized user invokes the GPT Action.</p>
 <h2>Revocation</h2>
-<p>Users can remove the connected account from ChatGPT's connected account controls. Administrators can also delete OAuth clients and clear OAuth diagnostic logs from the server admin UI.</p>
+<p>Users can remove the connected account from ChatGPT's connected account controls. Administrators can also delete OAuth clients from the server admin UI.</p>
 </main>
 </body>
 </html>`, {
@@ -1203,48 +511,6 @@ app.get("/admin/oauth-clients", async (c) => {
     clients: sortPublicClients(clients.items.map(publicClientInfo)),
     cursor: clients.cursor,
   });
-});
-
-app.get("/admin/oauth-events", async (c) => {
-  if (!isAdminAuthorized(c.req.raw, c.env)) {
-    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
-  }
-
-  return c.json({ events: (await listOAuthEvents(c.env.OAUTH_KV)).map(publicOAuthEvent) });
-});
-
-app.post("/admin/oauth-events/clear", async (c) => {
-  if (!isAdminAuthorized(c.req.raw, c.env)) {
-    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
-  }
-
-  return c.json({ deleted: await clearOAuthEvents(c.env.OAUTH_KV) });
-});
-
-app.post("/admin/oauth-events/:event_id/exchange-code", async (c) => {
-  if (!isAdminAuthorized(c.req.raw, c.env)) {
-    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
-  }
-
-  const event = await getOAuthEvent(c.env.OAUTH_KV, c.req.param("event_id"));
-  if (!event) {
-    return c.json({ error: "not_found", message: "OAuth event was not found.", status: 404 }, 404);
-  }
-
-  const body: TokenExchangeSelfTestBody = await c.req.json<TokenExchangeSelfTestBody>().catch(() => ({}));
-  const clientSecret = typeof body.client_secret === "string" && body.client_secret.trim()
-    ? body.client_secret.trim()
-    : undefined;
-
-  return exchangeAuthorizationCodeForDiagnostics(c, event, clientSecret);
-});
-
-app.get("/admin/runtime", async (c) => {
-  if (!isAdminAuthorized(c.req.raw, c.env)) {
-    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
-  }
-
-  return c.json(getRuntimeInfo(c.env));
 });
 
 app.post("/admin/oauth-clients", async (c) => {

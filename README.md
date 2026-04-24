@@ -59,7 +59,7 @@ npm run deploy
 
 Your server will be available at `https://<your-worker>.workers.dev/mcp`.
 
-If you use Cloudflare Workers Builds from GitHub, set the Worker **Deploy command** to `npm run deploy` instead of the default `npx wrangler deploy`. The deploy script passes `WORKERS_CI_COMMIT_SHA` into the Worker so the admin page can show the running commit.
+If you use Cloudflare Workers Builds from GitHub, the default deploy command is enough. `npm run deploy` is available for local deploys.
 
 ## Connecting from Claude
 
@@ -119,7 +119,7 @@ The easiest path is the browser admin UI:
 https://<your-worker>.workers.dev/admin
 ```
 
-Log in with `ACTIONS_ADMIN_TOKEN`, open **New client**, and click **Create client**. The page shows the one-time `client_id`, `client_secret`, schema URL, authorization URL, token URL, scope, token exchange method, and privacy policy URL to paste into ChatGPT. After ChatGPT generates its OAuth callback URL, paste that callback URL into step 2 in the same admin flow. The server stores both `chat.openai.com` and `chatgpt.com` callback host variants.
+Log in with `ACTIONS_ADMIN_TOKEN`, enter a client name, and click **Create**. The page shows the one-time `client_id`, `client_secret`, schema URL, authorization URL, token URL, scope, token exchange method, and privacy policy URL to paste into ChatGPT. After ChatGPT generates its OAuth callback URL, select the client and paste that callback URL into **Callback URL from ChatGPT**. The server stores both `chat.openai.com` and `chatgpt.com` callback host variants.
 
 You can also create one OAuth client with the admin HTTP API before ChatGPT gives you a callback URL:
 
