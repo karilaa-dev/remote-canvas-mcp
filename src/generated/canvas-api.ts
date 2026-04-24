@@ -2,7 +2,7 @@
 
 import type { CanvasClient } from "../canvas-client.js";
 
-// Extend CanvasClient prototype with all API methods
+// Extend CanvasClient prototype with read-only API methods
 export function installApiMethods(Client: typeof CanvasClient): void {
   const proto = Client.prototype;
 
@@ -29,16 +29,6 @@ export function installApiMethods(Client: typeof CanvasClient): void {
     });
   };
 
-  proto.createCourse = async function(args: Record<string, unknown>) {
-    const { account_id, ...courseData } = args;
-    return this.request<unknown>("POST", `/accounts/${account_id}/courses`, { body: { course: courseData } });
-  };
-
-  proto.updateCourse = async function(args: Record<string, unknown>) {
-    const { course_id, ...courseData } = args;
-    return this.request<unknown>("PUT", `/courses/${course_id}`, { body: { course: courseData } });
-  };
-
   proto.listAssignments = async function(courseId: number | string, includeSubmissions = false) {
     const include = ["assignment_group", "rubric", "due_at"];
     if (includeSubmissions) include.push("submission");
@@ -51,16 +41,6 @@ export function installApiMethods(Client: typeof CanvasClient): void {
     return this.request<unknown>("GET", `/courses/${courseId}/assignments/${assignmentId}`, { params: { include } });
   };
 
-  proto.createAssignment = async function(args: Record<string, unknown>) {
-    const { course_id, ...assignmentData } = args;
-    return this.request<unknown>("POST", `/courses/${course_id}/assignments`, { body: { assignment: assignmentData } });
-  };
-
-  proto.updateAssignment = async function(args: Record<string, unknown>) {
-    const { course_id, assignment_id, ...assignmentData } = args;
-    return this.request<unknown>("PUT", `/courses/${course_id}/assignments/${assignment_id}`, { body: { assignment: assignmentData } });
-  };
-
   proto.listAssignmentGroups = async function(courseId: number | string) {
     return this.request<unknown[]>("GET", `/courses/${courseId}/assignment_groups`, {
       params: { include: ["assignments"] },
@@ -70,30 +50,6 @@ export function installApiMethods(Client: typeof CanvasClient): void {
   proto.getSubmission = async function(courseId: number | string, assignmentId: number | string, userId: number | string = "self") {
     return this.request<unknown>("GET", `/courses/${courseId}/assignments/${assignmentId}/submissions/${userId}`, {
       params: { include: ["submission_comments", "rubric_assessment", "assignment"] },
-    });
-  };
-
-  proto.submitAssignment = async function(args: Record<string, unknown>) {
-    const { course_id, assignment_id, submission_type, body, url, file_ids } = args as {
-      course_id: number; assignment_id: number; submission_type: string;
-      body?: string; url?: string; file_ids?: number[];
-    };
-    const submissionData: Record<string, unknown> = { submission_type };
-    if (body) submissionData.body = body;
-    if (url) submissionData.url = url;
-    if (file_ids && file_ids.length > 0) submissionData.file_ids = file_ids;
-    return this.request<unknown>("POST", `/courses/${course_id}/assignments/${assignment_id}/submissions`, {
-      body: { submission: submissionData },
-    });
-  };
-
-  proto.submitGrade = async function(args: Record<string, unknown>) {
-    const { course_id, assignment_id, user_id, grade, comment } = args as {
-      course_id: number; assignment_id: number; user_id: number;
-      grade: number | string; comment?: string;
-    };
-    return this.request<unknown>("PUT", `/courses/${course_id}/assignments/${assignment_id}/submissions/${user_id}`, {
-      body: { submission: { posted_grade: grade, comment: comment ? { text_comment: comment } : undefined } },
     });
   };
 
@@ -153,29 +109,12 @@ export function installApiMethods(Client: typeof CanvasClient): void {
     return this.request<unknown>("GET", `/conversations/${conversationId}`);
   };
 
-  proto.createConversation = async function(recipients: string[], body: string, subject?: string) {
-    return this.request<unknown>("POST", "/conversations", { body: { recipients, body, subject } });
-  };
-
   proto.listNotifications = async function() {
     return this.request<unknown[]>("GET", "/users/self/activity_stream");
   };
 
   proto.getUserProfile = async function() {
     return this.request<unknown>("GET", "/users/self/profile");
-  };
-
-  proto.updateUserProfile = async function(profileData: Record<string, unknown>) {
-    return this.request<unknown>("PUT", "/users/self", { body: { user: profileData } });
-  };
-
-  proto.enrollUser = async function(args: Record<string, unknown>) {
-    const { course_id, user_id, role = "StudentEnrollment", enrollment_state = "active" } = args as {
-      course_id: number; user_id: number; role?: string; enrollment_state?: string;
-    };
-    return this.request<unknown>("POST", `/courses/${course_id}/enrollments`, {
-      body: { enrollment: { user_id, type: role, enrollment_state } },
-    });
   };
 
   proto.getCourseGrades = async function(courseId: number | string) {
@@ -222,10 +161,6 @@ export function installApiMethods(Client: typeof CanvasClient): void {
     });
   };
 
-  proto.markModuleItemComplete = async function(courseId: number | string, moduleId: number | string, itemId: number | string) {
-    await this.request<void>("PUT", `/courses/${courseId}/modules/${moduleId}/items/${itemId}/done`);
-  };
-
   proto.listDiscussionTopics = async function(courseId: number | string) {
     return this.request<unknown[]>("GET", `/courses/${courseId}/discussion_topics`, {
       params: { include: ["assignment"] },
@@ -235,12 +170,6 @@ export function installApiMethods(Client: typeof CanvasClient): void {
   proto.getDiscussionTopic = async function(courseId: number | string, topicId: number | string) {
     return this.request<unknown>("GET", `/courses/${courseId}/discussion_topics/${topicId}`, {
       params: { include: ["assignment"] },
-    });
-  };
-
-  proto.postToDiscussion = async function(courseId: number | string, topicId: number | string, message: string) {
-    return this.request<unknown>("POST", `/courses/${courseId}/discussion_topics/${topicId}/entries`, {
-      body: { message },
     });
   };
 
@@ -256,15 +185,6 @@ export function installApiMethods(Client: typeof CanvasClient): void {
 
   proto.getQuiz = async function(courseId: number | string, quizId: number | string) {
     return this.request<unknown>("GET", `/courses/${courseId}/quizzes/${quizId}`);
-  };
-
-  proto.createQuiz = async function(args: Record<string, unknown>) {
-    const { course_id, ...quizData } = args;
-    return this.request<unknown>("POST", `/courses/${course_id}/quizzes`, { body: { quiz: quizData } });
-  };
-
-  proto.startQuizAttempt = async function(courseId: number | string, quizId: number | string) {
-    return this.request<unknown>("POST", `/courses/${courseId}/quizzes/${quizId}/submissions`);
   };
 
   proto.listRubrics = async function(courseId: number | string) {
@@ -289,26 +209,12 @@ export function installApiMethods(Client: typeof CanvasClient): void {
     return this.request<unknown[]>("GET", `/accounts/${account_id}/users`, { params });
   };
 
-  proto.createUser = async function(args: Record<string, unknown>) {
-    const { account_id, ...userData } = args;
-    return this.request<unknown>("POST", `/accounts/${account_id}/users`, { body: userData });
-  };
-
   proto.listSubAccounts = async function(accountId: number | string) {
     return this.request<unknown[]>("GET", `/accounts/${accountId}/sub_accounts`);
   };
 
   proto.getAccountReports = async function(accountId: number | string) {
     return this.request<unknown[]>("GET", `/accounts/${accountId}/reports`);
-  };
-
-  proto.createAccountReport = async function(args: Record<string, unknown>) {
-    const { account_id, report, parameters } = args as {
-      account_id: number; report: string; parameters?: Record<string, unknown>;
-    };
-    return this.request<unknown>("POST", `/accounts/${account_id}/reports/${report}`, {
-      body: { parameters: parameters || {} },
-    });
   };
 
 }
@@ -319,16 +225,10 @@ declare module "../canvas-client.js" {
     healthCheck(): Promise<unknown>;
     listCourses(includeEnded?: boolean): Promise<unknown>;
     getCourse(courseId: number | string): Promise<unknown>;
-    createCourse(args: Record<string, unknown>): Promise<unknown>;
-    updateCourse(args: Record<string, unknown>): Promise<unknown>;
     listAssignments(courseId: number | string, includeSubmissions?: boolean): Promise<unknown>;
     getAssignment(courseId: number | string, assignmentId: number | string, includeSubmission?: boolean): Promise<unknown>;
-    createAssignment(args: Record<string, unknown>): Promise<unknown>;
-    updateAssignment(args: Record<string, unknown>): Promise<unknown>;
     listAssignmentGroups(courseId: number | string): Promise<unknown>;
     getSubmission(courseId: number | string, assignmentId: number | string, userId?: number | string): Promise<unknown>;
-    submitAssignment(args: Record<string, unknown>): Promise<unknown>;
-    submitGrade(args: Record<string, unknown>): Promise<unknown>;
     listFiles(courseId: number | string, folderId?: number): Promise<unknown>;
     getFile(fileId: number | string): Promise<unknown>;
     listFolders(courseId: number | string): Promise<unknown>;
@@ -341,34 +241,25 @@ declare module "../canvas-client.js" {
     getSyllabus(courseId: number | string): Promise<unknown>;
     listConversations(): Promise<unknown>;
     getConversation(conversationId: number | string): Promise<unknown>;
-    createConversation(recipients: string[], body: string, subject?: string): Promise<unknown>;
     listNotifications(): Promise<unknown>;
     getUserProfile(): Promise<unknown>;
-    updateUserProfile(profileData: Record<string, unknown>): Promise<unknown>;
-    enrollUser(args: Record<string, unknown>): Promise<unknown>;
     getCourseGrades(courseId: number | string): Promise<unknown>;
     getUserGrades(): Promise<unknown>;
     listModules(courseId: number | string): Promise<unknown>;
     getModule(courseId: number | string, moduleId: number | string): Promise<unknown>;
     listModuleItems(courseId: number | string, moduleId: number | string): Promise<unknown>;
     getModuleItem(courseId: number | string, moduleId: number | string, itemId: number | string): Promise<unknown>;
-    markModuleItemComplete(courseId: number | string, moduleId: number | string, itemId: number | string): Promise<unknown>;
     listDiscussionTopics(courseId: number | string): Promise<unknown>;
     getDiscussionTopic(courseId: number | string, topicId: number | string): Promise<unknown>;
-    postToDiscussion(courseId: number | string, topicId: number | string, message: string): Promise<unknown>;
     listAnnouncements(courseId: number | string): Promise<unknown>;
     listQuizzes(courseId: number | string): Promise<unknown>;
     getQuiz(courseId: number | string, quizId: number | string): Promise<unknown>;
-    createQuiz(args: Record<string, unknown>): Promise<unknown>;
-    startQuizAttempt(courseId: number | string, quizId: number | string): Promise<unknown>;
     listRubrics(courseId: number | string): Promise<unknown>;
     getRubric(courseId: number | string, rubricId: number | string): Promise<unknown>;
     getAccount(accountId: number | string): Promise<unknown>;
     listAccountCourses(args: Record<string, unknown>): Promise<unknown>;
     listAccountUsers(args: Record<string, unknown>): Promise<unknown>;
-    createUser(args: Record<string, unknown>): Promise<unknown>;
     listSubAccounts(accountId: number | string): Promise<unknown>;
     getAccountReports(accountId: number | string): Promise<unknown>;
-    createAccountReport(args: Record<string, unknown>): Promise<unknown>;
   }
 }
