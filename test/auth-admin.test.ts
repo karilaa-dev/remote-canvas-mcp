@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ClientInfo, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
-import { AuthHandler } from "../src/auth-handler.js";
+import { AuthHandler, tokenBodyWithStoredRedirectUri } from "../src/auth-handler.js";
 
 const baseClient: ClientInfo = {
   clientId: "client-1",
@@ -195,4 +195,26 @@ test("admin redirect update expands ChatGPT callback host variants", async () =>
     "https://chat.openai.com/aip/g-test/oauth/callback",
     "https://chatgpt.com/aip/g-test/oauth/callback",
   ]);
+});
+
+test("token compatibility wrapper injects stored redirect_uri for non-PKCE clients", async () => {
+  const body = await tokenBodyWithStoredRedirectUri(
+    new URLSearchParams({
+      client_id: "client-1",
+      client_secret: "secret",
+      code: "user-1:grant-1:secret",
+      grant_type: "authorization_code",
+    }).toString(),
+    {
+      get: async (key: string) => {
+        assert.equal(key, "oauth:auth-code-redirect:user-1:grant-1");
+        return "https://chat.openai.com/aip/g-test/oauth/callback";
+      },
+    } as unknown as KVNamespace,
+  );
+
+  assert.equal(
+    new URLSearchParams(body).get("redirect_uri"),
+    "https://chat.openai.com/aip/g-test/oauth/callback",
+  );
 });

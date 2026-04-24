@@ -31,6 +31,35 @@ type ClientDeleteBody = {
 };
 
 const PLACEHOLDER_REDIRECT_URI = "https://canvas-mcp.invalid/oauth/callback-placeholder";
+const AUTH_CODE_REDIRECT_PREFIX = "oauth:auth-code-redirect:";
+
+type TokenEndpointProvider = {
+  fetch: (request: Request, env: Env, ctx: ExecutionContext) => Promise<Response>;
+};
+
+let tokenEndpointProvider: TokenEndpointProvider | null = null;
+
+async function getTokenEndpointProvider(): Promise<TokenEndpointProvider> {
+  if (tokenEndpointProvider) return tokenEndpointProvider;
+
+  const { default: OAuthProvider } = await import("@cloudflare/workers-oauth-provider");
+  const fallbackHandler = {
+    fetch: () => new Response("Not found", { status: 404 }),
+  };
+
+  tokenEndpointProvider = new OAuthProvider<Env>({
+    apiHandlers: {
+      "/__oauth-token-api-unused": fallbackHandler,
+    },
+    defaultHandler: fallbackHandler,
+    authorizeEndpoint: "/authorize",
+    tokenEndpoint: "/oauth/token",
+    clientRegistrationEndpoint: "/register",
+    scopesSupported: ["canvas.read"],
+  });
+
+  return tokenEndpointProvider;
+}
 
 function getFormString(formData: FormData, field: string): string | null {
   const value = formData.get(field);
@@ -43,6 +72,12 @@ function parseEncodedState(encoded: string): { oauthReqInfo?: AuthRequest } | nu
   } catch {
     return null;
   }
+}
+
+function authCodeRedirectKey(code: string): string | null {
+  const [userId, grantId] = code.split(":");
+  if (!userId || !grantId) return null;
+  return `${AUTH_CODE_REDIRECT_PREFIX}${userId}:${grantId}`;
 }
 
 function getBearerToken(request: Request): string | null {
@@ -114,6 +149,24 @@ function parseClientIds(body: ClientDeleteBody): string[] {
   }
 
   return Array.from(ids);
+}
+
+export async function tokenBodyWithStoredRedirectUri(bodyText: string, kv: KVNamespace): Promise<string> {
+  const params = new URLSearchParams(bodyText);
+  if (params.get("grant_type") !== "authorization_code") return bodyText;
+  if (params.get("redirect_uri")) return bodyText;
+
+  const code = params.get("code");
+  if (!code) return bodyText;
+
+  const key = authCodeRedirectKey(code);
+  if (!key) return bodyText;
+
+  const redirectUri = await kv.get(key);
+  if (!redirectUri) return bodyText;
+
+  params.set("redirect_uri", redirectUri);
+  return params.toString();
 }
 
 function renderAdminPage(): Response {
@@ -497,6 +550,12 @@ app.post("/authorize", async (c) => {
       props: { login: userId, timezone } satisfies Props,
     });
 
+    const code = new URL(redirectTo).searchParams.get("code");
+    const key = code ? authCodeRedirectKey(code) : null;
+    if (key) {
+      await c.env.OAUTH_KV.put(key, state.oauthReqInfo.redirectUri, { expirationTtl: 600 });
+    }
+
     const headers = new Headers({ Location: redirectTo });
     headers.append("Set-Cookie", approvedClientCookie);
     return new Response(null, { status: 302, headers });
@@ -504,6 +563,23 @@ app.post("/authorize", async (c) => {
     if (error instanceof OAuthError) return error.toResponse();
     return c.text(`Internal server error: ${error instanceof Error ? error.message : String(error)}`, 500);
   }
+});
+
+app.post("/token", async (c) => {
+  const body = await tokenBodyWithStoredRedirectUri(await c.req.raw.text(), c.env.OAUTH_KV);
+  const url = new URL(c.req.url);
+  url.pathname = "/oauth/token";
+
+  const headers = new Headers(c.req.raw.headers);
+  headers.set("Content-Type", "application/x-www-form-urlencoded");
+  headers.delete("Content-Length");
+
+  const provider = await getTokenEndpointProvider();
+  return provider.fetch(new Request(url.toString(), {
+    body,
+    headers,
+    method: "POST",
+  }), c.env, c.executionCtx);
 });
 
 app.get("/actions/openapi.json", (c) => {

@@ -37,7 +37,7 @@ export default new OAuthProvider({
   // Hono's fetch signature is compatible but structurally different from ExportedHandler
   defaultHandler: AuthHandler as any,
   authorizeEndpoint: "/authorize",
-  tokenEndpoint: "/token",
+  tokenEndpoint: "/oauth/token",
   clientRegistrationEndpoint: "/register",
   scopesSupported: ["canvas.read"],
 });
