@@ -30,6 +30,10 @@ type ClientDeleteBody = {
   client_ids?: unknown;
 };
 
+type TokenExchangeSelfTestBody = {
+  client_secret?: unknown;
+};
+
 const PLACEHOLDER_REDIRECT_URI = "https://canvas-mcp.invalid/oauth/callback-placeholder";
 const AUTH_CODE_ALIAS_PREFIX = "oauth:auth-code-alias:";
 const AUTH_CODE_REDIRECT_PREFIX = "oauth:auth-code-redirect:";
@@ -965,7 +969,11 @@ function redactedTokenBody(text: string): unknown {
   }
 }
 
-async function exchangeAuthorizationCodeForDiagnostics(c: Context<HonoEnv>, event: OAuthEvent): Promise<Response> {
+async function exchangeAuthorizationCodeForDiagnostics(
+  c: Context<HonoEnv>,
+  event: OAuthEvent,
+  providedClientSecret?: string,
+): Promise<Response> {
   if (!event.authorization_code || !event.client_id) {
     return c.json({
       error: "invalid_request",
@@ -988,13 +996,24 @@ async function exchangeAuthorizationCodeForDiagnostics(c: Context<HonoEnv>, even
   if (event.redirect_uri) params.set("redirect_uri", event.redirect_uri);
 
   const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded" });
-  if (tokenAuthMethod === "client_secret_basic" && client.clientSecret) {
+  const clientSecret = providedClientSecret;
+
+  if (tokenAuthMethod !== "none" && !clientSecret) {
+    return c.json({
+      consumed_code: false,
+      error: "invalid_request",
+      message: "Paste the client secret for this OAuth client before running the self-test.",
+      status: 400,
+    }, 400);
+  }
+
+  if (tokenAuthMethod === "client_secret_basic" && clientSecret) {
     headers.set(
       "Authorization",
-      `Basic ${btoa(`${encodeURIComponent(event.client_id)}:${encodeURIComponent(client.clientSecret)}`)}`,
+      `Basic ${btoa(`${encodeURIComponent(event.client_id)}:${encodeURIComponent(clientSecret)}`)}`,
     );
-  } else if (tokenAuthMethod !== "none" && client.clientSecret) {
-    params.set("client_secret", client.clientSecret);
+  } else if (tokenAuthMethod !== "none" && clientSecret) {
+    params.set("client_secret", clientSecret);
   }
 
   const body = await tokenBodyWithStoredRedirectUri(params.toString(), c.env.OAUTH_KV);
@@ -1126,7 +1145,12 @@ app.post("/admin/oauth-events/:event_id/exchange-code", async (c) => {
     return c.json({ error: "not_found", message: "OAuth event was not found.", status: 404 }, 404);
   }
 
-  return exchangeAuthorizationCodeForDiagnostics(c, event);
+  const body: TokenExchangeSelfTestBody = await c.req.json<TokenExchangeSelfTestBody>().catch(() => ({}));
+  const clientSecret = typeof body.client_secret === "string" && body.client_secret.trim()
+    ? body.client_secret.trim()
+    : undefined;
+
+  return exchangeAuthorizationCodeForDiagnostics(c, event, clientSecret);
 });
 
 app.get("/admin/runtime", async (c) => {

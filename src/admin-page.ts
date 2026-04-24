@@ -396,13 +396,15 @@ async function refreshEvents() {
 }
 async function selfTestExchange(eventId) {
   if (!confirm("This consumes the authorization code from this failed login. Continue?")) return;
+  const clientSecret = prompt("Paste this OAuth client's client secret for this one-time self-test. It will not be stored.") || "";
   setStatus("Testing token exchange...");
   let result = {};
   let ok = false;
   try {
     const response = await fetch("/admin/oauth-events/" + encodeURIComponent(eventId) + "/exchange-code", {
       method: "POST",
-      headers: authHeaders(),
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ client_secret: clientSecret.trim() }),
     });
     ok = response.ok;
     result = await response.json().catch(() => ({ status: response.status, response: "Non-JSON response" }));
