@@ -158,7 +158,7 @@ Then open the browser admin UI:
 https://<your-worker>.workers.dev/admin
 ```
 
-Log in with `ACTIONS_ADMIN_TOKEN`, select the OAuth client, paste the latest ChatGPT callback URL, and update the redirect URIs. The UI stores the admin token in browser local storage only.
+Log in with `ACTIONS_ADMIN_TOKEN` to create Custom GPT OAuth clients, inspect clients grouped by name, update redirect URIs, and delete one or more selected clients. The UI stores the admin token in browser local storage only.
 
 You can also update the client with the HTTP API:
 

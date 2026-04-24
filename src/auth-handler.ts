@@ -1,5 +1,6 @@
-import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import type { AuthRequest, ClientInfo, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
+import { renderAdminPage as renderAdminUiPage } from "./admin-page.js";
 import { getActionsOpenApiDocument } from "./actions-openapi.js";
 import { storeCanvasCredentials } from "./credential-store.js";
 import { normalizeTimezone, type Props } from "./utils.js";
@@ -18,6 +19,15 @@ const app = new Hono<HonoEnv>();
 type RedirectUriUpdateBody = {
   redirect_uri?: unknown;
   redirect_uris?: unknown;
+};
+
+type ClientCreateBody = RedirectUriUpdateBody & {
+  client_name?: unknown;
+  token_endpoint_auth_method?: unknown;
+};
+
+type ClientDeleteBody = {
+  client_ids?: unknown;
 };
 
 function getFormString(formData: FormData, field: string): string | null {
@@ -54,11 +64,54 @@ function publicClientInfo(client: Awaited<ReturnType<OAuthHelpers["lookupClient"
   return {
     client_id: client.clientId,
     client_name: client.clientName,
+    client_uri: client.clientUri,
+    contacts: client.contacts,
     redirect_uris: client.redirectUris,
     grant_types: client.grantTypes,
+    logo_uri: client.logoUri,
+    policy_uri: client.policyUri,
+    registration_date: client.registrationDate,
     response_types: client.responseTypes,
+    tos_uri: client.tosUri,
     token_endpoint_auth_method: client.tokenEndpointAuthMethod,
   };
+}
+
+function clientCreationResponse(client: ClientInfo) {
+  return {
+    ...publicClientInfo(client),
+    client_secret: client.clientSecret,
+  };
+}
+
+function sortPublicClients<T extends { client_id?: string; client_name?: string } | null>(clients: T[]): T[] {
+  return [...clients].sort((a, b) => {
+    const nameCompare = (a?.client_name ?? "Unnamed client").localeCompare(b?.client_name ?? "Unnamed client");
+    if (nameCompare !== 0) return nameCompare;
+    return (a?.client_id ?? "").localeCompare(b?.client_id ?? "");
+  });
+}
+
+function parseTokenEndpointAuthMethod(value: unknown): "client_secret_basic" | "client_secret_post" | "none" {
+  if (value === undefined || value === null || value === "") return "client_secret_post";
+  if (value === "client_secret_basic" || value === "client_secret_post" || value === "none") return value;
+  throw new OAuthError("invalid_request", "token_endpoint_auth_method must be client_secret_post, client_secret_basic, or none.", 400);
+}
+
+function parseClientIds(body: ClientDeleteBody): string[] {
+  if (!Array.isArray(body.client_ids) || body.client_ids.length === 0) {
+    throw new OAuthError("invalid_request", "client_ids must be a non-empty array.", 400);
+  }
+
+  const ids = new Set<string>();
+  for (const value of body.client_ids) {
+    if (typeof value !== "string" || !value.trim()) {
+      throw new OAuthError("invalid_request", "client_ids must contain only non-empty strings.", 400);
+    }
+    ids.add(value.trim());
+  }
+
+  return Array.from(ids);
 }
 
 function renderAdminPage(): Response {
@@ -445,7 +498,7 @@ app.get("/actions/openapi.json", (c) => {
   return c.json(getActionsOpenApiDocument(origin));
 });
 
-app.get("/admin", () => renderAdminPage());
+app.get("/admin", () => renderAdminUiPage());
 
 app.get("/admin/oauth-clients", async (c) => {
   if (!isAdminAuthorized(c.req.raw, c.env)) {
@@ -454,9 +507,72 @@ app.get("/admin/oauth-clients", async (c) => {
 
   const clients = await c.env.OAUTH_PROVIDER.listClients({ limit: 100 });
   return c.json({
-    clients: clients.items.map(publicClientInfo),
+    clients: sortPublicClients(clients.items.map(publicClientInfo)),
     cursor: clients.cursor,
   });
+});
+
+app.post("/admin/oauth-clients", async (c) => {
+  try {
+    if (!isAdminAuthorized(c.req.raw, c.env)) {
+      return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+    }
+
+    const body = await c.req.json<ClientCreateBody>();
+    const clientName = typeof body.client_name === "string" && body.client_name.trim()
+      ? body.client_name.trim()
+      : "Canvas LMS Custom GPT";
+    const redirectUris = parseRedirectUris(body);
+    const tokenEndpointAuthMethod = parseTokenEndpointAuthMethod(body.token_endpoint_auth_method);
+    const client = await c.env.OAUTH_PROVIDER.createClient({
+      clientName,
+      grantTypes: ["authorization_code", "refresh_token"],
+      redirectUris,
+      responseTypes: ["code"],
+      tokenEndpointAuthMethod,
+    });
+
+    return c.json(clientCreationResponse(client), 201);
+  } catch (error: unknown) {
+    if (error instanceof OAuthError) return error.toResponse();
+    return c.json({
+      error: "invalid_request",
+      message: error instanceof Error ? error.message : String(error),
+      status: 400,
+    }, 400);
+  }
+});
+
+app.post("/admin/oauth-clients/delete", async (c) => {
+  try {
+    if (!isAdminAuthorized(c.req.raw, c.env)) {
+      return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+    }
+
+    const body = await c.req.json<ClientDeleteBody>();
+    const clientIds = parseClientIds(body);
+    const deleted: string[] = [];
+    const missing: string[] = [];
+
+    for (const clientId of clientIds) {
+      const client = await c.env.OAUTH_PROVIDER.lookupClient(clientId);
+      if (!client) {
+        missing.push(clientId);
+        continue;
+      }
+      await c.env.OAUTH_PROVIDER.deleteClient(clientId);
+      deleted.push(clientId);
+    }
+
+    return c.json({ deleted, missing });
+  } catch (error: unknown) {
+    if (error instanceof OAuthError) return error.toResponse();
+    return c.json({
+      error: "invalid_request",
+      message: error instanceof Error ? error.message : String(error),
+      status: 400,
+    }, 400);
+  }
 });
 
 app.get("/admin/oauth-clients/:client_id", async (c) => {
