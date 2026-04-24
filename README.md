@@ -152,7 +152,15 @@ If ChatGPT changes the OAuth callback URL after you enter the client ID and secr
 npx wrangler secret put ACTIONS_ADMIN_TOKEN
 ```
 
-Then update the client with the latest callback URL shown by ChatGPT:
+Then open the browser admin UI:
+
+```text
+https://<your-worker>.workers.dev/admin
+```
+
+Log in with `ACTIONS_ADMIN_TOKEN`, select the OAuth client, paste the latest ChatGPT callback URL, and update the redirect URIs. The UI stores the admin token in browser local storage only.
+
+You can also update the client with the HTTP API:
 
 ```bash
 curl -sS https://<your-worker>.workers.dev/admin/oauth-clients/<client_id>/redirect-uris \

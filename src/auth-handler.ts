@@ -61,6 +61,265 @@ function publicClientInfo(client: Awaited<ReturnType<OAuthHelpers["lookupClient"
   };
 }
 
+function renderAdminPage(): Response {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas OAuth Admin</title>
+<style>
+:root{color-scheme:dark;--bg:#111312;--panel:#191c1b;--panel-2:#202422;--line:#343a37;--text:#f2f5f1;--muted:#9aa39e;--accent:#74d09f;--accent-2:#d2a85b;--danger:#ef7c7c;--radius:8px;--shadow:0 18px 60px rgba(0,0,0,.34)}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 0 0,rgba(116,208,159,.1),transparent 31rem),linear-gradient(145deg,#0d0f0e,#151816 45%,#101211);color:var(--text);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;min-height:100vh}
+button,input,textarea{font:inherit}
+.shell{max-width:1180px;margin:0 auto;padding:28px}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:18px}
+.brand{display:grid;gap:4px}
+.eyebrow{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+h1{font-size:28px;line-height:1.05;margin:0;font-weight:650;letter-spacing:0}
+.status{min-height:22px;color:var(--muted);text-align:right}
+.grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
+.panel{background:linear-gradient(180deg,rgba(255,255,255,.025),transparent),var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.section{padding:16px;border-bottom:1px solid var(--line)}
+.section:last-child{border-bottom:0}
+label{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.07em;margin:0 0 7px}
+input,textarea{width:100%;border:1px solid var(--line);background:#0d0f0e;color:var(--text);border-radius:6px;padding:10px 11px;outline:none}
+textarea{min-height:112px;resize:vertical}
+input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(116,208,159,.12)}
+.row{display:flex;gap:8px;align-items:center}
+.row input{min-width:0}
+.button{border:1px solid var(--line);background:var(--panel-2);color:var(--text);border-radius:6px;padding:10px 12px;cursor:pointer;white-space:nowrap}
+.button:hover{border-color:#56615b;background:#252b28}
+.primary{background:var(--accent);border-color:var(--accent);color:#07100b;font-weight:700}
+.primary:hover{background:#88e2b1}
+.danger{color:#ffd0d0;border-color:#604040}
+.list{display:grid;gap:8px;max-height:520px;overflow:auto}
+.client{border:1px solid var(--line);background:#111412;border-radius:6px;padding:10px;text-align:left;cursor:pointer}
+.client:hover,.client.active{border-color:var(--accent);background:#17211b}
+.client strong{display:block;margin-bottom:3px}
+.client span{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 12px;margin:0}
+.meta dt{color:var(--muted)}
+.meta dd{margin:0;overflow-wrap:anywhere}
+.uri-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.uri-list li{background:#0d0f0e;border:1px solid var(--line);border-radius:6px;padding:9px 10px;overflow-wrap:anywhere}
+.hidden{display:none!important}
+.empty{color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:6px}
+@media (max-width:820px){.shell{padding:18px}.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.status{text-align:left}.meta{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div class="brand">
+      <div class="eyebrow">Canvas LMS</div>
+      <h1>OAuth Admin</h1>
+    </div>
+    <div class="status" id="status"></div>
+  </header>
+
+  <section class="panel" id="loginPanel">
+    <div class="section">
+      <label for="token">Admin token</label>
+      <div class="row">
+        <input id="token" type="password" autocomplete="current-password">
+        <button class="button primary" id="saveToken">Login</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid hidden" id="appPanel">
+    <aside class="panel">
+      <div class="section">
+        <div class="row">
+          <button class="button primary" id="refreshClients">Refresh</button>
+          <button class="button danger" id="logout">Logout</button>
+        </div>
+      </div>
+      <div class="section">
+        <label for="clientSearch">Client ID</label>
+        <div class="row">
+          <input id="clientSearch" placeholder="lcxWz465JLWtJRjx">
+          <button class="button" id="loadClient">Load</button>
+        </div>
+      </div>
+      <div class="section">
+        <label>Clients</label>
+        <div class="list" id="clientList"></div>
+      </div>
+    </aside>
+
+    <section class="panel">
+      <div class="section">
+        <dl class="meta" id="clientMeta"></dl>
+      </div>
+      <div class="section">
+        <label>Redirect URIs</label>
+        <ul class="uri-list" id="redirectUris"></ul>
+      </div>
+      <div class="section">
+        <label for="newRedirect">Current callback URL</label>
+        <textarea id="newRedirect" placeholder="https://chat.openai.com/aip/g-.../oauth/callback"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="button primary" id="updateRedirects">Update redirects</button>
+        </div>
+      </div>
+    </section>
+  </section>
+</main>
+<script>
+const tokenInput = document.getElementById("token");
+const saveToken = document.getElementById("saveToken");
+const loginPanel = document.getElementById("loginPanel");
+const appPanel = document.getElementById("appPanel");
+const statusEl = document.getElementById("status");
+const clientList = document.getElementById("clientList");
+const clientMeta = document.getElementById("clientMeta");
+const redirectUris = document.getElementById("redirectUris");
+const clientSearch = document.getElementById("clientSearch");
+const newRedirect = document.getElementById("newRedirect");
+let selectedClientId = "";
+
+function setStatus(message, tone = "muted") {
+  statusEl.textContent = message;
+  statusEl.style.color = tone === "error" ? "var(--danger)" : tone === "ok" ? "var(--accent)" : "var(--muted)";
+}
+
+function getToken() {
+  return localStorage.getItem("canvasAdminToken") || "";
+}
+
+function authHeaders(extra = {}) {
+  return { ...extra, Authorization: "Bearer " + getToken() };
+}
+
+function showApp() {
+  loginPanel.classList.add("hidden");
+  appPanel.classList.remove("hidden");
+}
+
+function showLogin() {
+  appPanel.classList.add("hidden");
+  loginPanel.classList.remove("hidden");
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: authHeaders(options.headers || {}),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || data.error || "Request failed");
+  return data;
+}
+
+function renderClientList(clients) {
+  clientList.innerHTML = "";
+  if (!clients.length) {
+    clientList.innerHTML = '<div class="empty">No clients found.</div>';
+    return;
+  }
+  for (const client of clients) {
+    const button = document.createElement("button");
+    button.className = "client" + (client.client_id === selectedClientId ? " active" : "");
+    button.innerHTML = "<strong></strong><span></span><span></span>";
+    button.querySelector("strong").textContent = client.client_name || "Unnamed client";
+    button.querySelectorAll("span")[0].textContent = client.client_id;
+    button.querySelectorAll("span")[1].textContent = (client.redirect_uris || [])[0] || "No redirect URI";
+    button.addEventListener("click", () => loadClient(client.client_id));
+    clientList.appendChild(button);
+  }
+}
+
+function renderClient(client) {
+  selectedClientId = client.client_id;
+  clientSearch.value = client.client_id;
+  clientMeta.innerHTML = "";
+  for (const [label, value] of [
+    ["Client ID", client.client_id],
+    ["Name", client.client_name || ""],
+    ["Grant types", (client.grant_types || []).join(", ")],
+    ["Response types", (client.response_types || []).join(", ")],
+    ["Token auth", client.token_endpoint_auth_method || ""],
+  ]) {
+    const dt = document.createElement("dt");
+    const dd = document.createElement("dd");
+    dt.textContent = label;
+    dd.textContent = value;
+    clientMeta.append(dt, dd);
+  }
+  redirectUris.innerHTML = "";
+  for (const uri of client.redirect_uris || []) {
+    const li = document.createElement("li");
+    li.textContent = uri;
+    redirectUris.appendChild(li);
+  }
+}
+
+async function refreshClients() {
+  setStatus("Loading clients...");
+  const data = await api("/admin/oauth-clients");
+  renderClientList(data.clients || []);
+  setStatus("Clients loaded", "ok");
+}
+
+async function loadClient(clientId) {
+  if (!clientId) return;
+  setStatus("Loading client...");
+  const client = await api("/admin/oauth-clients/" + encodeURIComponent(clientId));
+  renderClient(client);
+  await refreshClients();
+  setStatus("Client loaded", "ok");
+}
+
+async function updateRedirects() {
+  if (!selectedClientId) throw new Error("Load a client first.");
+  const redirectUri = newRedirect.value.trim();
+  if (!redirectUri) throw new Error("Paste a callback URL first.");
+  setStatus("Updating redirects...");
+  const client = await api("/admin/oauth-clients/" + encodeURIComponent(selectedClientId) + "/redirect-uris", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ redirect_uri: redirectUri }),
+  });
+  newRedirect.value = "";
+  renderClient(client);
+  await refreshClients();
+  setStatus("Redirects updated", "ok");
+}
+
+saveToken.addEventListener("click", async () => {
+  localStorage.setItem("canvasAdminToken", tokenInput.value.trim());
+  showApp();
+  try { await refreshClients(); } catch (error) { setStatus(error.message, "error"); }
+});
+document.getElementById("refreshClients").addEventListener("click", () => refreshClients().catch((error) => setStatus(error.message, "error")));
+document.getElementById("logout").addEventListener("click", () => { localStorage.removeItem("canvasAdminToken"); showLogin(); setStatus(""); });
+document.getElementById("loadClient").addEventListener("click", () => loadClient(clientSearch.value.trim()).catch((error) => setStatus(error.message, "error")));
+document.getElementById("updateRedirects").addEventListener("click", () => updateRedirects().catch((error) => setStatus(error.message, "error")));
+tokenInput.addEventListener("keydown", (event) => { if (event.key === "Enter") saveToken.click(); });
+clientSearch.addEventListener("keydown", (event) => { if (event.key === "Enter") document.getElementById("loadClient").click(); });
+
+if (getToken()) {
+  showApp();
+  refreshClients().catch((error) => setStatus(error.message, "error"));
+} else {
+  showLogin();
+}
+</script>
+</body>
+</html>`;
+
+  return new Response(html, {
+    headers: {
+      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Frame-Options": "DENY",
+    },
+  });
+}
+
 function expandChatGptRedirectUri(uri: string): string[] {
   let parsed: URL;
   try {
@@ -184,6 +443,20 @@ app.post("/authorize", async (c) => {
 app.get("/actions/openapi.json", (c) => {
   const origin = new URL(c.req.url).origin;
   return c.json(getActionsOpenApiDocument(origin));
+});
+
+app.get("/admin", () => renderAdminPage());
+
+app.get("/admin/oauth-clients", async (c) => {
+  if (!isAdminAuthorized(c.req.raw, c.env)) {
+    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+  }
+
+  const clients = await c.env.OAUTH_PROVIDER.listClients({ limit: 100 });
+  return c.json({
+    clients: clients.items.map(publicClientInfo),
+    cursor: clients.cursor,
+  });
 });
 
 app.get("/admin/oauth-clients/:client_id", async (c) => {

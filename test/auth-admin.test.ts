@@ -21,6 +21,9 @@ function createEnv(client: ClientInfo | null = baseClient): Env & { OAUTH_PROVID
     MCP_OBJECT: {} as Env["MCP_OBJECT"],
     OAUTH_KV: {} as Env["OAUTH_KV"],
     OAUTH_PROVIDER: {
+      listClients: async () => ({
+        items: currentClient ? [currentClient] : [],
+      }),
       lookupClient: async () => currentClient,
       updateClient: async (_clientId: string, updates: Partial<ClientInfo>) => {
         if (!currentClient) return null;
@@ -30,6 +33,36 @@ function createEnv(client: ClientInfo | null = baseClient): Env & { OAUTH_PROVID
     } as unknown as OAuthHelpers,
   };
 }
+
+test("serves the browser admin page", async () => {
+  const response = await AuthHandler.request("/admin", {}, createEnv());
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Canvas OAuth Admin/);
+});
+
+test("admin client list returns public client details", async () => {
+  const response = await AuthHandler.request(
+    "/admin/oauth-clients",
+    {
+      headers: {
+        Authorization: "Bearer admin-secret",
+      },
+    },
+    createEnv(),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    clients: [{
+      client_id: "client-1",
+      client_name: "Canvas GPT",
+      redirect_uris: ["https://old.example/callback"],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "client_secret_post",
+    }],
+  });
+});
 
 test("admin redirect update requires bearer token", async () => {
   const response = await AuthHandler.request(
