@@ -352,6 +352,10 @@ async function refreshEvents() {
       event.has_redirect_uri === false ? "missing redirect_uri" : "",
       event.has_code_verifier ? "has code_verifier" : "",
       event.redirect_host ? "redirect=" + event.redirect_host + event.redirect_path : "",
+      event.callback_query_keys ? "query=" + event.callback_query_keys.join(",") : "",
+      typeof event.code_length === "number" ? "code_len=" + event.code_length : "",
+      event.code_has_colon ? "code has colon" : "",
+      typeof event.state_length === "number" ? "state_len=" + event.state_length : "",
       event.token_type ? "token_type=" + event.token_type : "",
     ].filter(Boolean).join(" | ");
     const error = document.createElement("span");

@@ -39,7 +39,10 @@ const OAUTH_EVENT_PREFIX = "oauth:event:";
 type OAuthEvent = {
   auth_method?: string;
   body_keys?: string[];
+  callback_query_keys?: string[];
   client_id?: string;
+  code_has_colon?: boolean;
+  code_length?: number;
   error?: string;
   error_description?: string;
   grant_type?: string | null;
@@ -51,6 +54,7 @@ type OAuthEvent = {
   redirect_host?: string;
   redirect_path?: string;
   status: number;
+  state_length?: number;
   timestamp?: string;
   token_type?: string;
 };
@@ -126,6 +130,27 @@ function summarizeRedirectUri(redirectUri: string | undefined): Pick<OAuthEvent,
   try {
     const url = new URL(redirectUri);
     return { redirect_host: url.host, redirect_path: url.pathname };
+  } catch {
+    return {};
+  }
+}
+
+function summarizeCallbackRedirect(redirectTo: string): Pick<
+  OAuthEvent,
+  "callback_query_keys" | "code_has_colon" | "code_length" | "redirect_host" | "redirect_path" | "state_length"
+> {
+  try {
+    const url = new URL(redirectTo);
+    const code = url.searchParams.get("code") ?? "";
+    const state = url.searchParams.get("state") ?? "";
+    return {
+      callback_query_keys: Array.from(new Set(Array.from(url.searchParams.keys()))),
+      code_has_colon: code.includes(":"),
+      code_length: code.length,
+      redirect_host: url.host,
+      redirect_path: url.pathname,
+      state_length: state.length,
+    };
   } catch {
     return {};
   }
@@ -720,13 +745,13 @@ app.post("/authorize", async (c) => {
     await recordOAuthEvent(c.env, {
       client_id: state.oauthReqInfo.clientId,
       phase: "authorize",
-      status: 302,
-      ...summarizeRedirectUri(state.oauthReqInfo.redirectUri),
+      status: 303,
+      ...summarizeCallbackRedirect(redirectTo),
     });
 
     const headers = new Headers({ Location: redirectTo });
     headers.append("Set-Cookie", approvedClientCookie);
-    return new Response(null, { status: 302, headers });
+    return new Response(null, { status: 303, headers });
   } catch (error: unknown) {
     if (error instanceof OAuthError) return error.toResponse();
     await recordOAuthEvent(c.env, {
