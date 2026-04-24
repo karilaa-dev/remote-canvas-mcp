@@ -37,6 +37,8 @@ const INTERNAL_TOKEN_ENDPOINT = "/_oauth/internal-token";
 const OAUTH_EVENT_PREFIX = "oauth:event:";
 
 type OAuthEvent = {
+  access_control_request_headers?: string;
+  access_control_request_method?: string;
   auth_method?: string;
   body_keys?: string[];
   callback_query_keys?: string[];
@@ -53,7 +55,8 @@ type OAuthEvent = {
   has_redirect_uri?: boolean;
   id?: string;
   message?: string;
-  phase: "authorize_request" | "authorize" | "token";
+  origin_host?: string;
+  phase: "authorize_request" | "authorize" | "token" | "token_preflight";
   request_query_keys?: string[];
   redirect_host?: string;
   redirect_path?: string;
@@ -200,6 +203,29 @@ function parseBasicClientId(authHeader: string | null): string | undefined {
   }
 }
 
+function addTokenCorsHeaders(headers: Headers, request: Request): Headers {
+  const origin = request.headers.get("Origin");
+  headers.set("Access-Control-Allow-Origin", origin || "*");
+  headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  headers.set(
+    "Access-Control-Allow-Headers",
+    request.headers.get("Access-Control-Request-Headers") || "authorization, content-type",
+  );
+  headers.set("Access-Control-Max-Age", "600");
+  headers.set("Vary", "Origin, Access-Control-Request-Headers");
+  return headers;
+}
+
+function getOriginHost(request: Request): string | undefined {
+  const origin = request.headers.get("Origin");
+  if (!origin) return undefined;
+  try {
+    return new URL(origin).host;
+  } catch {
+    return undefined;
+  }
+}
+
 function summarizeTokenRequest(bodyText: string, request: Request): OAuthEvent {
   const params = new URLSearchParams(bodyText);
   const authClientId = parseBasicClientId(request.headers.get("Authorization"));
@@ -210,6 +236,7 @@ function summarizeTokenRequest(bodyText: string, request: Request): OAuthEvent {
     grant_type: params.get("grant_type"),
     has_code_verifier: params.has("code_verifier"),
     has_redirect_uri: params.has("redirect_uri"),
+    origin_host: getOriginHost(request),
     phase: "token",
     status: 0,
   };
@@ -250,6 +277,18 @@ async function listOAuthEvents(kv: KVNamespace): Promise<OAuthEvent[]> {
   return events.filter((event): event is OAuthEvent => Boolean(event)).sort((a, b) =>
     (b.timestamp ?? "").localeCompare(a.timestamp ?? ""),
   );
+}
+
+async function clearOAuthEvents(kv: KVNamespace): Promise<number> {
+  let deleted = 0;
+  let cursor: string | undefined;
+  do {
+    const listed = await kv.list({ prefix: OAUTH_EVENT_PREFIX, cursor, limit: 100 });
+    await Promise.all(listed.keys.map((key) => kv.delete(key.name)));
+    deleted += listed.keys.length;
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+  return deleted;
 }
 
 function getBearerToken(request: Request): string | null {
@@ -350,8 +389,9 @@ async function tokenResponseWithDiagnostics(
   response: Response,
   env: Env,
   requestSummary: OAuthEvent,
+  request: Request,
 ): Promise<Response> {
-  const headers = new Headers(response.headers);
+  const headers = addTokenCorsHeaders(new Headers(response.headers), request);
   headers.delete("Content-Length");
   const text = await response.text();
   let json: Record<string, unknown> | null = null;
@@ -817,9 +857,27 @@ async function handleTokenRequest(c: Context<HonoEnv>): Promise<Response> {
     headers,
     method: "POST",
   }), c.env, c.executionCtx);
-  return tokenResponseWithDiagnostics(response, c.env, requestSummary);
+  return tokenResponseWithDiagnostics(response, c.env, requestSummary, c.req.raw);
 }
 
+async function handleTokenPreflight(c: Context<HonoEnv>): Promise<Response> {
+  await recordOAuthEvent(c.env, {
+    access_control_request_headers: c.req.raw.headers.get("Access-Control-Request-Headers") ?? undefined,
+    access_control_request_method: c.req.raw.headers.get("Access-Control-Request-Method") ?? undefined,
+    origin_host: getOriginHost(c.req.raw),
+    phase: "token_preflight",
+    status: 204,
+  });
+
+  return new Response(null, {
+    headers: addTokenCorsHeaders(new Headers(), c.req.raw),
+    status: 204,
+  });
+}
+
+app.options("/token", handleTokenPreflight);
+app.options("/oauth/token", handleTokenPreflight);
+app.options(INTERNAL_TOKEN_ENDPOINT, handleTokenPreflight);
 app.post("/token", handleTokenRequest);
 app.post("/oauth/token", handleTokenRequest);
 app.post(INTERNAL_TOKEN_ENDPOINT, handleTokenRequest);
@@ -849,6 +907,14 @@ app.get("/admin/oauth-events", async (c) => {
   }
 
   return c.json({ events: await listOAuthEvents(c.env.OAUTH_KV) });
+});
+
+app.post("/admin/oauth-events/clear", async (c) => {
+  if (!isAdminAuthorized(c.req.raw, c.env)) {
+    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+  }
+
+  return c.json({ deleted: await clearOAuthEvents(c.env.OAUTH_KV) });
 });
 
 app.get("/admin/runtime", async (c) => {
