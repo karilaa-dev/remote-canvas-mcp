@@ -63,6 +63,7 @@ type OAuthEvent = {
   response_type?: string;
   scope?: string;
   status: number;
+  completion_mode?: OAuthCompletionMode;
   state_hash?: string;
   state_length?: number;
   timestamp?: string;
@@ -75,6 +76,8 @@ type RuntimeInfo = {
   worker_version_tag?: string;
   worker_version_timestamp?: string;
 };
+
+type OAuthCompletionMode = "redirect" | "handoff";
 
 type TokenEndpointProvider = {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => Promise<Response>;
@@ -296,6 +299,39 @@ function getBearerToken(request: Request): string | null {
   if (!header) return null;
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match?.[1] ?? null;
+}
+
+function sanitizeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function renderCallbackHandoffPage(redirectTo: string, setCookie: string): Response {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=${sanitizeHtml(redirectTo)}">
+<title>Returning to ChatGPT</title>
+</head>
+<body>
+<p>Returning to ChatGPT...</p>
+<script>window.location.replace(${JSON.stringify(redirectTo)});</script>
+</body>
+</html>`;
+
+  return new Response(html, {
+    headers: {
+      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+      "Content-Type": "text/html; charset=utf-8",
+      "Referrer-Policy": "no-referrer",
+      "Set-Cookie": setCookie,
+    },
+  });
 }
 
 function isAdminAuthorized(request: Request, env: Env): boolean {
@@ -820,15 +856,14 @@ app.post("/authorize", async (c) => {
 
     await recordOAuthEvent(c.env, {
       client_id: state.oauthReqInfo.clientId,
+      completion_mode: "handoff",
       phase: "authorize",
       state_hash: await hashDiagnosticValue(state.oauthReqInfo.state),
-      status: 303,
+      status: 200,
       ...callbackSummary,
     });
 
-    const headers = new Headers({ Location: redirectTo });
-    headers.append("Set-Cookie", approvedClientCookie);
-    return new Response(null, { status: 303, headers });
+    return renderCallbackHandoffPage(redirectTo, approvedClientCookie);
   } catch (error: unknown) {
     if (error instanceof OAuthError) return error.toResponse();
     await recordOAuthEvent(c.env, {

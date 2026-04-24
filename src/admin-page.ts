@@ -359,6 +359,7 @@ async function refreshEvents() {
       event.access_control_request_headers ? "preflight_headers=" + event.access_control_request_headers : "",
       event.response_type ? "response_type=" + event.response_type : "",
       event.scope ? "scope=" + event.scope : "",
+      event.completion_mode ? "completion=" + event.completion_mode : "",
       event.grant_type ? "grant=" + event.grant_type : "",
       event.has_redirect_uri === false ? "missing redirect_uri" : "",
       event.has_code_challenge ? "has code_challenge" : "",
