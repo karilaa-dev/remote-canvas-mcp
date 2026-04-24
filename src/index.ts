@@ -29,7 +29,9 @@ export class CanvasLmsMcp extends McpAgent<Env, Record<string, never>, Props> {
   }
 }
 
-export default new OAuthProvider({
+const INTERNAL_TOKEN_ENDPOINT = "/_oauth/internal-token";
+
+const oauthProvider = new OAuthProvider({
   apiHandlers: {
     "/mcp": CanvasLmsMcp.serve("/mcp"),
     "/actions/api/": CanvasActionsApi,
@@ -37,7 +39,35 @@ export default new OAuthProvider({
   // Hono's fetch signature is compatible but structurally different from ExportedHandler
   defaultHandler: AuthHandler as any,
   authorizeEndpoint: "/authorize",
-  tokenEndpoint: "/_oauth/internal-token",
+  tokenEndpoint: INTERNAL_TOKEN_ENDPOINT,
   clientRegistrationEndpoint: "/register",
   scopesSupported: ["canvas.read"],
 });
+
+function jsonResponse(data: unknown, init?: ResponseInit): Response {
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  return new Response(JSON.stringify(data), { ...init, headers });
+}
+
+async function publicOAuthMetadata(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const response = await oauthProvider.fetch(request, env, ctx);
+  const metadata = await response.json<Record<string, unknown>>();
+  const origin = new URL(request.url).origin;
+  metadata.token_endpoint = `${origin}/token`;
+  metadata.revocation_endpoint = `${origin}/token`;
+  return jsonResponse(metadata, { headers: response.headers, status: response.status, statusText: response.statusText });
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === "/.well-known/oauth-authorization-server") {
+      return publicOAuthMetadata(request, env, ctx);
+    }
+    if (url.pathname === INTERNAL_TOKEN_ENDPOINT) {
+      return AuthHandler.fetch(request, env as Env & { OAUTH_PROVIDER: never }, ctx);
+    }
+    return oauthProvider.fetch(request, env, ctx);
+  },
+};

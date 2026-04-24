@@ -822,6 +822,7 @@ async function handleTokenRequest(c: Context<HonoEnv>): Promise<Response> {
 
 app.post("/token", handleTokenRequest);
 app.post("/oauth/token", handleTokenRequest);
+app.post(INTERNAL_TOKEN_ENDPOINT, handleTokenRequest);
 
 app.get("/actions/openapi.json", (c) => {
   const origin = new URL(c.req.url).origin;
