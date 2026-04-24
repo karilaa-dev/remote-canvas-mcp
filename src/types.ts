@@ -1,4 +1,4 @@
-export * from "./generated/types.js";
+export * from "./canvas-types.js";
 
 export class CanvasAPIError extends Error {
   constructor(

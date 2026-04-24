@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CanvasClient } from "./canvas-client.js";
 import { getCanvasCredentials } from "./credential-store.js";
 import { AuthHandler } from "./auth-handler.js";
-import { registerAllTools } from "./generated/register-tools.js";
+import { registerAllTools } from "./canvas-tools.js";
 import type { Props } from "./utils.js";
 
 export class CanvasLmsMcp extends McpAgent<Env, Record<string, never>, Props> {

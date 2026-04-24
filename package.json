@@ -7,7 +7,8 @@
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
     "generate:direct-openapi": "node --import tsx scripts/generate-direct-canvas-openapi.ts",
-    "sync": "tsx scripts/sync-upstream.ts"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.3.0",
