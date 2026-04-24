@@ -171,6 +171,22 @@ When the GPT first uses an action, ChatGPT will start the OAuth flow. The approv
 
 The Actions API is read-only and available under `/actions/api/*`. It exposes focused endpoints for health, profile, courses, assignments, upcoming assignments, dashboard cards, course grades, modules, pages, and files.
 
+### ChatGPT OAuth hostname
+
+Use the `workers.dev` hostname for ChatGPT Actions:
+
+```
+https://<your-worker>.workers.dev
+```
+
+Cloudflare zone hostnames have known issues with ChatGPT OAuth token exchange. In testing, ChatGPT can receive an HTML `403` response from Cloudflare for `/token` before the request reaches the Worker, which fails OAuth because ChatGPT expects JSON:
+
+```text
+403, message='Attempt to decode JSON with unexpected mimetype: text/html; charset=utf-8', url='https://.../token'
+```
+
+For that reason, set the schema URL, authorization URL, token URL, privacy policy URL, and all Actions API URLs to the same `workers.dev` hostname. Do not mix hostnames in the GPT Actions configuration.
+
 ### Updating a changing ChatGPT callback URL
 
 If ChatGPT changes the OAuth callback URL after you enter the client ID and secret, update the existing OAuth client instead of registering a new one. First set an admin token:
