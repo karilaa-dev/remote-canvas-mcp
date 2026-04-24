@@ -322,6 +322,9 @@ async function refreshRuntime() {
   $("runtimeInfo").innerHTML = "";
   const commit = document.createElement("code");
   commit.textContent = "Commit: " + (runtime.source_commit || "unknown");
+  if (runtime.source_commit === "not injected") {
+    commit.textContent += " (set Cloudflare deploy command to npm run deploy)";
+  }
   const worker = document.createElement("code");
   worker.textContent = "Worker: " + (runtime.worker_version_id || "unknown");
   const tag = document.createElement("code");

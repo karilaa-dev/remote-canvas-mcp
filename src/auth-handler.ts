@@ -183,7 +183,7 @@ function summarizeTokenRequest(bodyText: string, request: Request): OAuthEvent {
 
 function getRuntimeInfo(env: Env): RuntimeInfo {
   return {
-    source_commit: env.SOURCE_COMMIT ?? "unknown",
+    source_commit: env.SOURCE_COMMIT ?? "not injected",
     worker_version_id: env.VERSION_METADATA?.id,
     worker_version_tag: env.VERSION_METADATA?.tag,
     worker_version_timestamp: env.VERSION_METADATA?.timestamp,

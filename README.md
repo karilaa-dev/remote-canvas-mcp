@@ -59,6 +59,8 @@ npm run deploy
 
 Your server will be available at `https://<your-worker>.workers.dev/mcp`.
 
+If you use Cloudflare Workers Builds from GitHub, set the Worker **Deploy command** to `npm run deploy` instead of the default `npx wrangler deploy`. The deploy script passes `WORKERS_CI_COMMIT_SHA` into the Worker so the admin page can show the running commit.
+
 ## Connecting from Claude
 
 1. Open Claude Desktop or claude.ai

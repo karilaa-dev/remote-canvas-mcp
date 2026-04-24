@@ -10,7 +10,7 @@ declare namespace Cloudflare {
 		OAUTH_KV: KVNamespace;
 		COOKIE_ENCRYPTION_KEY: string;
 		ACTIONS_ADMIN_TOKEN: string;
-		SOURCE_COMMIT: string;
+		SOURCE_COMMIT?: string;
 		VERSION_METADATA: WorkerVersionMetadata;
 		MCP_OBJECT: DurableObjectNamespace<import("./src/index").CanvasLmsMcp>;
 	}
@@ -20,7 +20,9 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ACTIONS_ADMIN_TOKEN" | "COOKIE_ENCRYPTION_KEY" | "SOURCE_COMMIT">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ACTIONS_ADMIN_TOKEN" | "COOKIE_ENCRYPTION_KEY">> {
+		SOURCE_COMMIT?: string;
+	}
 }
 
 // Begin runtime types
