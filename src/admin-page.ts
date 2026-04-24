@@ -48,6 +48,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .metric{background:#101311;border:1px solid var(--line);border-radius:6px;padding:10px}
 .metric b{display:block;font-size:20px;line-height:1.1}
 .metric span{color:var(--muted);font-size:12px}
+.runtime{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.runtime code{display:block;background:#101311;border:1px solid var(--line);border-radius:6px;padding:9px 10px;overflow-wrap:anywhere}
 .meta{display:grid;grid-template-columns:190px 1fr;gap:8px 12px;margin:0}
 .meta dt{color:var(--muted)}
 .meta dd{margin:0;overflow-wrap:anywhere}
@@ -135,6 +137,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
     </aside>
 
     <section class="panel">
+      <div class="section">
+        <label>Runtime version</label>
+        <div class="runtime" id="runtimeInfo">
+          <code>Commit: loading...</code>
+          <code>Worker: loading...</code>
+        </div>
+      </div>
       <div class="section">
         <div class="metrics">
           <div class="metric"><b id="metricTotal">0</b><span>Total clients</span></div>
@@ -308,6 +317,19 @@ async function refreshClients(keepSelection = true) {
   renderClientList();
   setStatus("Clients loaded", "ok");
 }
+async function refreshRuntime() {
+  const runtime = await api("/admin/runtime");
+  $("runtimeInfo").innerHTML = "";
+  const commit = document.createElement("code");
+  commit.textContent = "Commit: " + (runtime.source_commit || "unknown");
+  const worker = document.createElement("code");
+  worker.textContent = "Worker: " + (runtime.worker_version_id || "unknown");
+  const tag = document.createElement("code");
+  tag.textContent = "Tag: " + (runtime.worker_version_tag || "none");
+  const uploaded = document.createElement("code");
+  uploaded.textContent = "Uploaded: " + (runtime.worker_version_timestamp || "unknown");
+  $("runtimeInfo").append(commit, worker, tag, uploaded);
+}
 async function refreshEvents() {
   const data = await api("/admin/oauth-events");
   const events = data.events || [];
@@ -413,7 +435,11 @@ function setTab(tab) {
 $("saveToken").addEventListener("click", async () => {
   localStorage.setItem("canvasAdminToken", tokenInput.value.trim());
   showApp();
-  try { await refreshClients(false); } catch (error) { setStatus(error.message, "error"); }
+  try {
+    await refreshClients(false);
+    await refreshRuntime();
+    await refreshEvents();
+  } catch (error) { setStatus(error.message, "error"); }
 });
 $("refreshClients").addEventListener("click", () => refreshClients().catch((error) => setStatus(error.message, "error")));
 $("logout").addEventListener("click", () => { localStorage.removeItem("canvasAdminToken"); showLogin(); setStatus(""); });
@@ -428,6 +454,7 @@ document.querySelectorAll(".tab").forEach((button) => button.addEventListener("c
 if (getToken()) {
   showApp();
   refreshClients(false).catch((error) => setStatus(error.message, "error"));
+  refreshRuntime().catch(() => {});
   refreshEvents().catch(() => {});
 } else {
   showLogin();

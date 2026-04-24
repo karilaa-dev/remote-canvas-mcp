@@ -1,5 +1,5 @@
 import type { AuthRequest, ClientInfo, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { renderAdminPage as renderAdminUiPage } from "./admin-page.js";
 import { getActionsOpenApiDocument } from "./actions-openapi.js";
 import { storeCanvasCredentials } from "./credential-store.js";
@@ -33,6 +33,7 @@ type ClientDeleteBody = {
 const PLACEHOLDER_REDIRECT_URI = "https://canvas-mcp.invalid/oauth/callback-placeholder";
 const AUTH_CODE_ALIAS_PREFIX = "oauth:auth-code-alias:";
 const AUTH_CODE_REDIRECT_PREFIX = "oauth:auth-code-redirect:";
+const INTERNAL_TOKEN_ENDPOINT = "/_oauth/internal-token";
 const OAUTH_EVENT_PREFIX = "oauth:event:";
 
 type OAuthEvent = {
@@ -52,6 +53,13 @@ type OAuthEvent = {
   status: number;
   timestamp?: string;
   token_type?: string;
+};
+
+type RuntimeInfo = {
+  source_commit: string;
+  worker_version_id?: string;
+  worker_version_tag?: string;
+  worker_version_timestamp?: string;
 };
 
 type TokenEndpointProvider = {
@@ -74,7 +82,7 @@ async function getTokenEndpointProvider(): Promise<TokenEndpointProvider> {
     },
     defaultHandler: fallbackHandler,
     authorizeEndpoint: "/authorize",
-    tokenEndpoint: "/oauth/token",
+    tokenEndpoint: INTERNAL_TOKEN_ENDPOINT,
     clientRegistrationEndpoint: "/register",
     scopesSupported: ["canvas.read"],
   });
@@ -145,6 +153,15 @@ function summarizeTokenRequest(bodyText: string, request: Request): OAuthEvent {
     has_redirect_uri: params.has("redirect_uri"),
     phase: "token",
     status: 0,
+  };
+}
+
+function getRuntimeInfo(env: Env): RuntimeInfo {
+  return {
+    source_commit: env.SOURCE_COMMIT ?? "unknown",
+    worker_version_id: env.VERSION_METADATA?.id,
+    worker_version_tag: env.VERSION_METADATA?.tag,
+    worker_version_timestamp: env.VERSION_METADATA?.timestamp,
   };
 }
 
@@ -721,12 +738,12 @@ app.post("/authorize", async (c) => {
   }
 });
 
-app.post("/token", async (c) => {
+async function handleTokenRequest(c: Context<HonoEnv>): Promise<Response> {
   const originalBody = await c.req.raw.text();
   const body = await tokenBodyWithStoredRedirectUri(originalBody, c.env.OAUTH_KV);
   const requestSummary = summarizeTokenRequest(body, c.req.raw);
   const url = new URL(c.req.url);
-  url.pathname = "/oauth/token";
+  url.pathname = INTERNAL_TOKEN_ENDPOINT;
 
   const headers = new Headers(c.req.raw.headers);
   headers.set("Content-Type", "application/x-www-form-urlencoded");
@@ -739,7 +756,10 @@ app.post("/token", async (c) => {
     method: "POST",
   }), c.env, c.executionCtx);
   return tokenResponseWithDiagnostics(response, c.env, requestSummary);
-});
+}
+
+app.post("/token", handleTokenRequest);
+app.post("/oauth/token", handleTokenRequest);
 
 app.get("/actions/openapi.json", (c) => {
   const origin = new URL(c.req.url).origin;
@@ -766,6 +786,14 @@ app.get("/admin/oauth-events", async (c) => {
   }
 
   return c.json({ events: await listOAuthEvents(c.env.OAUTH_KV) });
+});
+
+app.get("/admin/runtime", async (c) => {
+  if (!isAdminAuthorized(c.req.raw, c.env)) {
+    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+  }
+
+  return c.json(getRuntimeInfo(c.env));
 });
 
 app.post("/admin/oauth-clients", async (c) => {
