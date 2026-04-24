@@ -60,7 +60,6 @@ app.post("/authorize", async (c) => {
     const canvasApiToken = getFormString(formData, "canvas_api_token");
     const canvasDomain = getFormString(formData, "canvas_domain");
     const timezone = normalizeTimezone(getFormString(formData, "timezone"));
-    const readOnly = getFormString(formData, "read_only") === "on";
     if (!canvasApiToken || !canvasDomain) {
       return c.text("Canvas API token and domain are required", 400);
     }
@@ -70,7 +69,7 @@ app.post("/authorize", async (c) => {
     await storeCanvasCredentials(
       c.env.OAUTH_KV,
       userId,
-      { canvasApiToken, canvasDomain, timezone, readOnly },
+      { canvasApiToken, canvasDomain, timezone },
       c.env.COOKIE_ENCRYPTION_KEY,
     );
 
@@ -85,7 +84,7 @@ app.post("/authorize", async (c) => {
       userId,
       metadata: { label: `canvas-user-${userId.slice(0, 8)}` },
       scope: state.oauthReqInfo.scope,
-      props: { login: userId, timezone, readOnly } satisfies Props,
+      props: { login: userId, timezone } satisfies Props,
     });
 
     const headers = new Headers({ Location: redirectTo });

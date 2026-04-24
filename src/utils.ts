@@ -1,7 +1,6 @@
 export type Props = {
   login: string;
   timezone?: string;
-  readOnly?: boolean;
 };
 
 export const DEFAULT_TIMEZONE = "UTC";

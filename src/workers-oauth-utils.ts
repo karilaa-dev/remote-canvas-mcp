@@ -180,9 +180,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .form-group input[type="text"],.form-group input[type="password"],.form-group select{width:100%;padding:.5rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.95rem;box-sizing:border-box;background:#fff}
 .form-group input:focus,.form-group select:focus{outline:none;border-color:#0070f3;box-shadow:0 0 0 2px rgba(0,112,243,.15)}
 .form-group .hint{font-size:.8rem;color:#6b7280;margin-top:.25rem}
-.checkbox-group{display:flex;gap:.75rem;align-items:flex-start}
-.checkbox-group input{margin-top:.3rem}
-.checkbox-group label{margin:0}
 .section-label{font-weight:600;font-size:.95rem;margin:1.5rem 0 .75rem;padding-top:1rem;border-top:1px solid #e5e7eb}
 .actions{display:flex;justify-content:flex-end;gap:1rem;margin-top:2rem}
 .button{padding:.75rem 1.5rem;border-radius:6px;font-weight:500;cursor:pointer;border:none;font-size:1rem}
@@ -213,12 +210,9 @@ ${clientUri ? `<p>Website: <a href="${clientUri}" target="_blank">${clientUri}</
 <select id="timezone" name="timezone">${renderTimezoneOptions()}</select>
 <div class="hint">Used to add local date/time fields to Canvas results. Defaults to your browser timezone when available.</div>
 </div>
-<div class="form-group checkbox-group">
-<input type="checkbox" id="read_only" name="read_only">
-<div>
-<label for="read_only">Enable read-only mode</label>
-<div class="hint">Only expose Canvas tools that read data. Tools that create, update, submit, post, enroll, or mark items complete will be hidden.</div>
-</div>
+<div class="form-group">
+<label>Canvas access</label>
+<div class="hint">This server only exposes Canvas tools that read data.</div>
 </div>
 <div class="actions"><button type="button" class="button button-secondary" onclick="window.history.back()">Cancel</button><button type="submit" class="button button-primary">Approve</button></div>
 </form>

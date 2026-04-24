@@ -18,7 +18,6 @@ export interface CanvasCredentials {
   canvasApiToken: string;
   canvasDomain: string;
   timezone?: string;
-  readOnly?: boolean;
 }
 
 interface StoredCredentials {
@@ -26,7 +25,6 @@ interface StoredCredentials {
   encryptedToken: string;
   canvasDomain: string;
   timezone?: string;
-  readOnly?: boolean;
   updatedAt: string;
 }
 
@@ -50,7 +48,6 @@ export async function getCanvasCredentials(
       canvasApiToken,
       canvasDomain: stored.canvasDomain,
       timezone: normalizeTimezone(stored.timezone),
-      readOnly: stored.readOnly ?? false,
     };
   } catch {
     // Parse or decryption failed (corrupted data, key rotated, etc.)
@@ -71,7 +68,6 @@ export async function storeCanvasCredentials(
     encryptedToken,
     canvasDomain: credentials.canvasDomain,
     timezone: normalizeTimezone(credentials.timezone),
-    readOnly: credentials.readOnly ?? false,
     updatedAt: new Date().toISOString(),
   };
 

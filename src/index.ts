@@ -23,7 +23,6 @@ export class CanvasLmsMcp extends McpAgent<Env, Record<string, never>, Props> {
       const client = new CanvasClient(credentials.canvasApiToken, credentials.canvasDomain);
       registerAllTools(this.server, client, {
         timezone: this.props?.timezone ?? credentials.timezone,
-        readOnly: this.props?.readOnly ?? credentials.readOnly,
       });
     }
   }
