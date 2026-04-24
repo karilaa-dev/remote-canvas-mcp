@@ -466,7 +466,7 @@ async function tokenResponseWithDiagnostics(
   }
 
   if (json && typeof json.token_type === "string" && json.token_type.toLowerCase() === "bearer") {
-    json.token_type = "Bearer";
+    json.token_type = "bearer";
   }
 
   await recordOAuthEvent(env, {
