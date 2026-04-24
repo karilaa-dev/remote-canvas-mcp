@@ -169,6 +169,22 @@ function summarizeCallbackRedirect(redirectTo: string): Pick<
   }
 }
 
+function normalizeCallbackQueryOrder(redirectTo: string): string {
+  try {
+    const url = new URL(redirectTo);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    if (!code || !state) return redirectTo;
+
+    url.search = "";
+    url.searchParams.set("state", state);
+    url.searchParams.set("code", code);
+    return url.toString();
+  } catch {
+    return redirectTo;
+  }
+}
+
 async function hashDiagnosticValue(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest))
@@ -852,6 +868,7 @@ app.post("/authorize", async (c) => {
       redirectUrl.searchParams.set("code", alias);
       redirectTo = redirectUrl.toString();
     }
+    redirectTo = normalizeCallbackQueryOrder(redirectTo);
     const callbackSummary = summarizeCallbackRedirect(redirectTo);
 
     await recordOAuthEvent(c.env, {
