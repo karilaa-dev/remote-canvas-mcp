@@ -6,6 +6,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
+    "generate:direct-openapi": "node --import tsx scripts/generate-direct-canvas-openapi.ts",
     "sync": "tsx scripts/sync-upstream.ts"
   },
   "dependencies": {
