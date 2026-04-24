@@ -99,6 +99,51 @@ Install or load this repository as a local Codex plugin. On first use, Codex wil
 
 If you deploy your own Worker, update the `url` in `.mcp.json` to your deployed `/mcp` endpoint before installing the plugin.
 
+## Connecting from a Custom GPT
+
+The same Worker also exposes a GPT Actions REST facade for the ChatGPT Custom GPT editor. The MCP endpoint remains available at `/mcp`; Custom GPT Actions should use the REST API described by:
+
+```text
+https://<your-worker>.workers.dev/actions/openapi.json
+```
+
+### One-time OAuth client registration
+
+Create one OAuth client for your Custom GPT using the existing dynamic client registration endpoint. Replace `g-YOUR-GPT-ID` after saving the GPT once in ChatGPT:
+
+```bash
+curl -sS https://<your-worker>.workers.dev/register \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "client_name": "Canvas LMS Custom GPT",
+    "redirect_uris": [
+      "https://chat.openai.com/aip/g-YOUR-GPT-ID/oauth/callback",
+      "https://chatgpt.com/aip/g-YOUR-GPT-ID/oauth/callback"
+    ],
+    "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"],
+    "scope": "canvas.read",
+    "token_endpoint_auth_method": "client_secret_post"
+  }'
+```
+
+Save the returned `client_id` and `client_secret`.
+
+### GPT Actions configuration
+
+In the Custom GPT editor:
+
+1. Add an Action and import the schema from `/actions/openapi.json`.
+2. Set authentication to **OAuth**.
+3. Use the registered `client_id` and `client_secret`.
+4. Set authorization URL to `https://<your-worker>.workers.dev/authorize`.
+5. Set token URL to `https://<your-worker>.workers.dev/token`.
+6. Set scope to `canvas.read`.
+
+When the GPT first uses an action, ChatGPT will start the OAuth flow. The approval page asks the user for their Canvas domain, Canvas API token, and timezone, then stores the Canvas token encrypted in KV.
+
+The Actions API is read-only and available under `/actions/api/*`. It exposes focused endpoints for health, profile, courses, assignments, upcoming assignments, dashboard cards, course grades, modules, pages, and files.
+
 ## Available tools
 
 Only read-only Canvas tools are registered. Tools that create, update, submit, post, enroll, start attempts, mark items complete, or generate reports are not exposed.

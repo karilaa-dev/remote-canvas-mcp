@@ -158,7 +158,7 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
   const { client, server, state, csrfToken, setCookie } = options;
   const encodedState = btoa(JSON.stringify(state));
   const serverName = sanitizeText(server.name);
-  const clientName = client?.clientName ? sanitizeText(client.clientName) : "Unknown MCP Client";
+  const clientName = client?.clientName ? sanitizeText(client.clientName) : "Unknown OAuth Client";
   const serverDescription = server.description ? sanitizeText(server.description) : "";
   const logoUrl = server.logo ? sanitizeText(sanitizeUrl(server.logo)) : "";
   const clientUri = client?.clientUri ? sanitizeText(sanitizeUrl(client.clientUri)) : "";
@@ -190,7 +190,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 <div class="precard"><div class="header">${logoUrl ? `<img src="${logoUrl}" alt="${serverName}" class="logo">` : ""}<h1 class="title"><strong>${serverName}</strong></h1></div>${serverDescription ? `<p>${serverDescription}</p>` : ""}</div>
 <div class="card"><h2 class="alert"><strong>${clientName}</strong> is requesting access</h2>
 ${clientUri ? `<p>Website: <a href="${clientUri}" target="_blank">${clientUri}</a></p>` : ""}
-<p>This MCP Client is requesting to be authorized on ${serverName}. Your Canvas credentials will be stored securely.</p>
+<p>This client is requesting read-only access through ${serverName}. Your Canvas credentials will be stored securely.</p>
 <form method="post" action="${new URL(request.url).pathname}">
 <input type="hidden" name="state" value="${encodedState}">
 <input type="hidden" name="csrf_token" value="${csrfToken}">

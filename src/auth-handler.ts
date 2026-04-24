@@ -1,5 +1,6 @@
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
+import { getActionsOpenApiDocument } from "./actions-openapi.js";
 import { storeCanvasCredentials } from "./credential-store.js";
 import { normalizeTimezone, type Props } from "./utils.js";
 import {
@@ -38,8 +39,8 @@ app.get("/authorize", async (c) => {
     client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
     csrfToken,
     server: {
-      name: "Canvas LMS MCP Server",
-      description: "Provides Canvas LMS tools for AI assistants. Enter your Canvas credentials to authorize access.",
+      name: "Canvas LMS Connector",
+      description: "Provides read-only Canvas LMS access for AI assistants. Enter your Canvas credentials to authorize access.",
     },
     setCookie,
     state: { oauthReqInfo },
@@ -94,6 +95,11 @@ app.post("/authorize", async (c) => {
     if (error instanceof OAuthError) return error.toResponse();
     return c.text(`Internal server error: ${error instanceof Error ? error.message : String(error)}`, 500);
   }
+});
+
+app.get("/actions/openapi.json", (c) => {
+  const origin = new URL(c.req.url).origin;
+  return c.json(getActionsOpenApiDocument(origin));
 });
 
 export { app as AuthHandler };

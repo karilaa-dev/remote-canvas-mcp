@@ -1,6 +1,7 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { CanvasActionsApi } from "./actions-api.js";
 import { CanvasClient } from "./canvas-client.js";
 import { getCanvasCredentials } from "./credential-store.js";
 import { AuthHandler } from "./auth-handler.js";
@@ -29,11 +30,14 @@ export class CanvasLmsMcp extends McpAgent<Env, Record<string, never>, Props> {
 }
 
 export default new OAuthProvider({
-  apiHandler: CanvasLmsMcp.serve("/mcp"),
-  apiRoute: "/mcp",
+  apiHandlers: {
+    "/mcp": CanvasLmsMcp.serve("/mcp"),
+    "/actions/api/": CanvasActionsApi,
+  },
   // Hono's fetch signature is compatible but structurally different from ExportedHandler
   defaultHandler: AuthHandler as any,
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/token",
   clientRegistrationEndpoint: "/register",
+  scopesSupported: ["canvas.read"],
 });
