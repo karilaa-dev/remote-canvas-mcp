@@ -71,6 +71,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .event{background:#101311;border:1px solid var(--line);border-radius:6px;padding:10px;display:grid;gap:4px}
 .event strong{font-size:12px}
 .event span{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.diagnostic{display:grid;gap:8px;margin-top:10px;background:#101311;border:1px solid var(--line);border-radius:8px;padding:12px}
+.diagnostic strong{font-size:13px}
+.diagnostic pre{margin:0;max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#0d0f0e;border:1px solid var(--line);border-radius:6px;padding:10px;color:#dfe7e2}
 .hidden{display:none!important}
 .empty{color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:6px}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -184,6 +187,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
           </div>
         </div>
         <div class="events" id="oauthEvents" style="margin-top:10px"></div>
+        <div class="diagnostic hidden" id="oauthDiagnostic"></div>
       </div>
     </section>
   </section>
@@ -199,6 +203,7 @@ const clientMeta = $("clientMeta");
 const redirectUris = $("redirectUris");
 const newRedirect = $("newRedirect");
 const filter = $("filter");
+const oauthDiagnostic = $("oauthDiagnostic");
 const selected = new Set();
 let clients = [];
 let selectedClientId = "";
@@ -422,7 +427,29 @@ async function selfTestExchange(eventId) {
   }
   const status = typeof result.status === "number" ? result.status : "unknown";
   setStatus("Token exchange self-test: HTTP " + status, ok ? "ok" : "error");
-  alert(JSON.stringify(result, null, 2));
+  renderOAuthDiagnostic(result);
+}
+function renderOAuthDiagnostic(result) {
+  oauthDiagnostic.classList.remove("hidden");
+  oauthDiagnostic.innerHTML = "";
+  const title = document.createElement("strong");
+  title.textContent = [
+    result.verdict || "self_test_result",
+    result.status ? "HTTP " + result.status : "",
+  ].filter(Boolean).join(" | ");
+  const next = document.createElement("span");
+  next.textContent = result.next_action || result.message || "";
+  const pre = document.createElement("pre");
+  pre.textContent = JSON.stringify(result, null, 2);
+  const copy = document.createElement("button");
+  copy.className = "button";
+  copy.type = "button";
+  copy.textContent = "Copy diagnostic JSON";
+  copy.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(pre.textContent || "");
+    setStatus("Copied diagnostic JSON", "ok");
+  });
+  oauthDiagnostic.append(title, next, copy, pre);
 }
 async function clearEvents() {
   if (!confirm("Clear all OAuth diagnostic events?")) return;

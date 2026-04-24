@@ -193,20 +193,6 @@ function normalizeCallbackQueryOrder(redirectTo: string): string {
   }
 }
 
-function preferCurrentChatGptCallbackHost(redirectTo: string): { redirectTo: string; rewrittenFrom?: string } {
-  try {
-    const url = new URL(redirectTo);
-    if (url.hostname !== "chat.openai.com") return { redirectTo };
-    if (!url.pathname.startsWith("/aip/") || !url.pathname.endsWith("/oauth/callback")) return { redirectTo };
-
-    const rewrittenFrom = url.hostname;
-    url.hostname = "chatgpt.com";
-    return { redirectTo: url.toString(), rewrittenFrom };
-  } catch {
-    return { redirectTo };
-  }
-}
-
 async function hashDiagnosticValue(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest))
@@ -396,6 +382,39 @@ function clientCreationResponse(client: ClientInfo, origin: string) {
     chatgpt_setup: getChatGptSetupInfo(origin, client.tokenEndpointAuthMethod),
     client_secret: client.clientSecret,
   };
+}
+
+function callbackHostWasPreserved(event: OAuthEvent): boolean | undefined {
+  if (!event.redirect_uri || !event.redirect_host) return undefined;
+  try {
+    return new URL(event.redirect_uri).host === event.redirect_host;
+  } catch {
+    return undefined;
+  }
+}
+
+function redirectUriIsRegistered(client: ClientInfo, redirectUri: string | undefined): boolean | undefined {
+  if (!redirectUri) return undefined;
+  return client.redirectUris?.some((uri) => uri === redirectUri || areChatGptCallbackHostVariants(uri, redirectUri)) ?? false;
+}
+
+function selfTestNextAction(response: Response, body: Record<string, unknown> | null): string {
+  if (response.ok) {
+    return "Token exchange works with the pasted client secret. If ChatGPT still shows an error and no token event appears, the failure is on ChatGPT's callback/resume step before it calls /token. Recreate the Action auth settings from the config block and run the sign-in again.";
+  }
+
+  const error = typeof body?.error === "string" ? body.error : "";
+  const description = typeof body?.error_description === "string" ? body.error_description : "";
+  if (error === "invalid_client" || description.includes("client_secret")) {
+    return "Client authentication failed. Use the exact client secret from the client creation result, or create a new client because existing secrets cannot be viewed later.";
+  }
+  if (error === "invalid_grant") {
+    return "The authorization code was already used or expired. Start a fresh ChatGPT sign-in and run this self-test only on the newest authorize event.";
+  }
+  if (error === "invalid_request") {
+    return "The token request shape was rejected. Check that ChatGPT uses the listed token URL, client ID, scope, and token exchange method.";
+  }
+  return "Token exchange failed. Compare the token_response, token_request_sent, and chatgpt_oauth_config blocks below.";
 }
 
 function sortPublicClients<T extends { client_id?: string; client_name?: string } | null>(clients: T[]): T[] {
@@ -899,8 +918,6 @@ app.post("/authorize", async (c) => {
       redirectTo = redirectUrl.toString();
     }
     redirectTo = normalizeCallbackQueryOrder(redirectTo);
-    const callbackHostPreference = preferCurrentChatGptCallbackHost(redirectTo);
-    redirectTo = callbackHostPreference.redirectTo;
     const callbackState = new URL(redirectTo).searchParams.get("state");
     const callbackSummary = summarizeCallbackRedirect(redirectTo);
     const callbackUrl = new URL(redirectTo);
@@ -912,7 +929,6 @@ app.post("/authorize", async (c) => {
       completion_mode: "redirect",
       phase: "authorize",
       redirect_uri: state.oauthReqInfo.redirectUri,
-      rewritten_from: callbackHostPreference.rewrittenFrom,
       state_hash: await hashDiagnosticValue(state.oauthReqInfo.state),
       status: 302,
       ...callbackSummary,
@@ -989,6 +1005,7 @@ async function exchangeAuthorizationCodeForDiagnostics(
   event: OAuthEvent,
   providedClientSecret?: string,
 ): Promise<Response> {
+  const origin = new URL(c.req.url).origin;
   if (!event.authorization_code || !event.client_id) {
     return c.json({
       error: "invalid_request",
@@ -1003,6 +1020,9 @@ async function exchangeAuthorizationCodeForDiagnostics(
   }
 
   const tokenAuthMethod = client.tokenEndpointAuthMethod ?? "client_secret_post";
+  const providerCode = await c.env.OAUTH_KV.get(authCodeAliasKey(event.authorization_code));
+  const redirectStorageKey = authCodeRedirectKey(providerCode ?? event.authorization_code);
+  const storedRedirectUri = redirectStorageKey ? await c.env.OAUTH_KV.get(redirectStorageKey) : null;
   const params = new URLSearchParams({
     client_id: event.client_id,
     code: event.authorization_code,
@@ -1018,6 +1038,11 @@ async function exchangeAuthorizationCodeForDiagnostics(
       consumed_code: false,
       error: "invalid_request",
       message: "Paste the client secret for this OAuth client before running the self-test.",
+      chatgpt_oauth_config: {
+        ...getChatGptSetupInfo(origin, tokenAuthMethod),
+        client_id: event.client_id,
+        expected_callback_url: event.redirect_uri,
+      },
       status: 400,
     }, 400);
   }
@@ -1046,6 +1071,7 @@ async function exchangeAuthorizationCodeForDiagnostics(
   const text = await response.text();
   const redactedBody = redactedTokenBody(text);
   const tokenJson = typeof redactedBody === "object" && redactedBody !== null ? redactedBody as Record<string, unknown> : null;
+  const queryKeys = event.callback_query_keys ?? [];
 
   await recordOAuthEvent(c.env, {
     ...requestSummary,
@@ -1059,8 +1085,53 @@ async function exchangeAuthorizationCodeForDiagnostics(
 
   return c.json({
     consumed_code: true,
+    verdict: response.ok ? "token_exchange_ok" : "token_exchange_failed",
     message: "This diagnostic exchange consumes the authorization code. Run the ChatGPT sign-in flow again after testing.",
-    response: redactedBody,
+    next_action: selfTestNextAction(response, tokenJson),
+    chatgpt_oauth_config: {
+      ...getChatGptSetupInfo(origin, tokenAuthMethod),
+      client_id: event.client_id,
+      expected_callback_url: event.redirect_uri,
+    },
+    client_registration: {
+      client_id: client.clientId,
+      client_name: client.clientName,
+      grant_types: client.grantTypes,
+      redirect_uri_registered: redirectUriIsRegistered(client, event.redirect_uri),
+      redirect_uris: client.redirectUris,
+      response_types: client.responseTypes,
+      token_endpoint_auth_method: tokenAuthMethod,
+    },
+    authorization_callback: {
+      callback_host_preserved: callbackHostWasPreserved(event),
+      callback_query_keys: queryKeys,
+      callback_state_matches_request_state: event.callback_state_hash && event.state_hash
+        ? event.callback_state_hash === event.state_hash
+        : undefined,
+      code_has_colon: event.code_has_colon,
+      code_length: event.code_length,
+      requested_redirect_uri: event.redirect_uri,
+      returned_redirect_host: event.redirect_host,
+      returned_redirect_path: event.redirect_path,
+      state_length: event.state_length,
+    },
+    code_storage: {
+      alias_found: Boolean(providerCode),
+      stored_redirect_found: Boolean(storedRedirectUri),
+      stored_redirect_matches_callback: storedRedirectUri && event.redirect_uri
+        ? storedRedirectUri === event.redirect_uri
+        : undefined,
+    },
+    token_request_sent: {
+      auth_method: requestSummary.auth_method,
+      body_fields: requestSummary.body_keys,
+      client_id: event.client_id,
+      content_type: "application/x-www-form-urlencoded",
+      grant_type: "authorization_code",
+      has_redirect_uri: requestSummary.has_redirect_uri,
+      token_url: `${origin}/token`,
+    },
+    token_response: redactedBody,
     status: response.status,
   }, response.ok ? 200 : 400);
 }
