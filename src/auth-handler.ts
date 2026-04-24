@@ -903,7 +903,6 @@ app.post("/authorize", async (c) => {
       headers: {
         "Cache-Control": "no-store",
         Location: redirectTo,
-        "Referrer-Policy": "no-referrer",
         "Set-Cookie": approvedClientCookie,
       },
       status: 302,
