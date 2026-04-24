@@ -355,6 +355,7 @@ async function refreshEvents() {
       event.has_redirect_uri === false ? "missing redirect_uri" : "",
       event.has_code_verifier ? "has code_verifier" : "",
       event.redirect_host ? "redirect=" + event.redirect_host + event.redirect_path : "",
+      event.redirect_rewritten_from ? "rewritten_from=" + event.redirect_rewritten_from : "",
       event.callback_query_keys ? "query=" + event.callback_query_keys.join(",") : "",
       typeof event.code_length === "number" ? "code_len=" + event.code_length : "",
       event.code_has_colon ? "code has colon" : "",

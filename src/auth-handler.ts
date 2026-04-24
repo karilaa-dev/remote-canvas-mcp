@@ -53,6 +53,7 @@ type OAuthEvent = {
   phase: "authorize" | "token";
   redirect_host?: string;
   redirect_path?: string;
+  redirect_rewritten_from?: string;
   status: number;
   state_length?: number;
   timestamp?: string;
@@ -153,6 +154,22 @@ function summarizeCallbackRedirect(redirectTo: string): Pick<
     };
   } catch {
     return {};
+  }
+}
+
+function preferChatGptCallbackHost(redirectTo: string): { redirectTo: string; rewrittenFrom?: string } {
+  try {
+    const url = new URL(redirectTo);
+    const isChatGptCallback = url.hostname === "chat.openai.com"
+      && url.pathname.startsWith("/aip/")
+      && url.pathname.endsWith("/oauth/callback");
+    if (!isChatGptCallback) return { redirectTo };
+
+    const rewrittenFrom = url.host;
+    url.hostname = "chatgpt.com";
+    return { redirectTo: url.toString(), rewrittenFrom };
+  } catch {
+    return { redirectTo };
   }
 }
 
@@ -741,10 +758,13 @@ app.post("/authorize", async (c) => {
       redirectUrl.searchParams.set("code", alias);
       redirectTo = redirectUrl.toString();
     }
+    const preferredCallback = preferChatGptCallbackHost(redirectTo);
+    redirectTo = preferredCallback.redirectTo;
 
     await recordOAuthEvent(c.env, {
       client_id: state.oauthReqInfo.clientId,
       phase: "authorize",
+      redirect_rewritten_from: preferredCallback.rewrittenFrom,
       status: 303,
       ...summarizeCallbackRedirect(redirectTo),
     });
