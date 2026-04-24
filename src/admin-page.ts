@@ -368,6 +368,7 @@ async function refreshEvents() {
       event.request_query_keys ? "request_query=" + event.request_query_keys.join(",") : "",
       event.has_code_verifier ? "has code_verifier" : "",
       event.redirect_host ? "redirect=" + event.redirect_host + event.redirect_path : "",
+      event.rewritten_from ? "rewritten_from=" + event.rewritten_from : "",
       event.callback_query_keys ? "query=" + event.callback_query_keys.join(",") : "",
       typeof event.code_length === "number" ? "code_len=" + event.code_length : "",
       event.code_has_colon ? "code has colon" : "",

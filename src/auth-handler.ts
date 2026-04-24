@@ -62,6 +62,7 @@ type OAuthEvent = {
   redirect_host?: string;
   redirect_path?: string;
   redirect_uri?: string;
+  rewritten_from?: string;
   response_type?: string;
   scope?: string;
   status: number;
@@ -185,6 +186,20 @@ function normalizeCallbackQueryOrder(redirectTo: string): string {
     return url.toString();
   } catch {
     return redirectTo;
+  }
+}
+
+function preferCurrentChatGptCallbackHost(redirectTo: string): { redirectTo: string; rewrittenFrom?: string } {
+  try {
+    const url = new URL(redirectTo);
+    if (url.hostname !== "chat.openai.com") return { redirectTo };
+    if (!url.pathname.startsWith("/aip/") || !url.pathname.endsWith("/oauth/callback")) return { redirectTo };
+
+    const rewrittenFrom = url.hostname;
+    url.hostname = "chatgpt.com";
+    return { redirectTo: url.toString(), rewrittenFrom };
+  } catch {
+    return { redirectTo };
   }
 }
 
@@ -405,16 +420,32 @@ export async function tokenBodyWithStoredRedirectUri(bodyText: string, kv: KVNam
   const providerCode = storedCode ?? code;
   if (storedCode) params.set("code", storedCode);
 
-  if (params.get("redirect_uri")) return params.toString();
-
   const key = authCodeRedirectKey(providerCode);
   if (!key) return bodyText;
 
   const redirectUri = await kv.get(key);
   if (!redirectUri) return bodyText;
 
-  params.set("redirect_uri", redirectUri);
+  const requestedRedirectUri = params.get("redirect_uri");
+  if (!requestedRedirectUri || areChatGptCallbackHostVariants(requestedRedirectUri, redirectUri)) {
+    params.set("redirect_uri", redirectUri);
+  }
   return params.toString();
+}
+
+function areChatGptCallbackHostVariants(left: string, right: string): boolean {
+  try {
+    const leftUrl = new URL(left);
+    const rightUrl = new URL(right);
+    const chatGptHosts = new Set(["chat.openai.com", "chatgpt.com"]);
+    return (
+      chatGptHosts.has(leftUrl.hostname) &&
+      chatGptHosts.has(rightUrl.hostname) &&
+      leftUrl.pathname === rightUrl.pathname
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function tokenResponseWithDiagnostics(
@@ -849,6 +880,8 @@ app.post("/authorize", async (c) => {
       redirectTo = redirectUrl.toString();
     }
     redirectTo = normalizeCallbackQueryOrder(redirectTo);
+    const callbackHostPreference = preferCurrentChatGptCallbackHost(redirectTo);
+    redirectTo = callbackHostPreference.redirectTo;
     const callbackState = new URL(redirectTo).searchParams.get("state");
     const callbackSummary = summarizeCallbackRedirect(redirectTo);
     const callbackUrl = new URL(redirectTo);
@@ -860,6 +893,7 @@ app.post("/authorize", async (c) => {
       completion_mode: "redirect",
       phase: "authorize",
       redirect_uri: state.oauthReqInfo.redirectUri,
+      rewritten_from: callbackHostPreference.rewrittenFrom,
       state_hash: await hashDiagnosticValue(state.oauthReqInfo.state),
       status: 302,
       ...callbackSummary,

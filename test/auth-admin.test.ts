@@ -253,3 +253,26 @@ test("token compatibility wrapper translates authorization code aliases", async 
   assert.equal(params.get("code"), "user-1:grant-1:secret");
   assert.equal(params.get("redirect_uri"), "https://chat.openai.com/aip/g-test/oauth/callback");
 });
+
+test("token compatibility wrapper normalizes ChatGPT callback host variants", async () => {
+  const body = await tokenBodyWithStoredRedirectUri(
+    new URLSearchParams({
+      client_id: "client-1",
+      client_secret: "secret",
+      code: "alias-code",
+      grant_type: "authorization_code",
+      redirect_uri: "https://chatgpt.com/aip/g-test/oauth/callback",
+    }).toString(),
+    {
+      get: async (key: string) => {
+        if (key === "oauth:auth-code-alias:alias-code") return "user-1:grant-1:secret";
+        if (key === "oauth:auth-code-redirect:user-1:grant-1") return "https://chat.openai.com/aip/g-test/oauth/callback";
+        return null;
+      },
+    } as unknown as KVNamespace,
+  );
+
+  const params = new URLSearchParams(body);
+  assert.equal(params.get("code"), "user-1:grant-1:secret");
+  assert.equal(params.get("redirect_uri"), "https://chat.openai.com/aip/g-test/oauth/callback");
+});
