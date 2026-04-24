@@ -113,7 +113,29 @@ The default schema intentionally does not include an OpenAPI OAuth security sche
 
 ### One-time OAuth client registration
 
-Create one OAuth client for your Custom GPT using the existing dynamic client registration endpoint. Replace `g-YOUR-GPT-ID` after saving the GPT once in ChatGPT:
+The easiest path is the browser admin UI:
+
+```text
+https://<your-worker>.workers.dev/admin
+```
+
+Log in with `ACTIONS_ADMIN_TOKEN`, open **New client**, and click **Create client**. The page shows the one-time `client_id`, `client_secret`, schema URL, authorization URL, token URL, scope, token exchange method, and privacy policy URL to paste into ChatGPT. After ChatGPT generates its OAuth callback URL, paste that callback URL into step 2 in the same admin flow. The server stores both `chat.openai.com` and `chatgpt.com` callback host variants.
+
+You can also create one OAuth client with the admin HTTP API before ChatGPT gives you a callback URL:
+
+```bash
+curl -sS https://<your-worker>.workers.dev/admin/oauth-clients \
+  -H 'Authorization: Bearer <your-admin-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "client_name": "Canvas LMS Custom GPT",
+    "token_endpoint_auth_method": "client_secret_post"
+  }'
+```
+
+Save the returned `client_id` and `client_secret`; the secret is shown only in the creation response. Then paste ChatGPT's generated callback URL into the admin UI or update it with the redirect endpoint below.
+
+The dynamic `/register` endpoint also works if you already know the callback URL. Replace `g-YOUR-GPT-ID` after saving the GPT once in ChatGPT:
 
 ```bash
 curl -sS https://<your-worker>.workers.dev/register \
@@ -163,7 +185,7 @@ Then open the browser admin UI:
 https://<your-worker>.workers.dev/admin
 ```
 
-Log in with `ACTIONS_ADMIN_TOKEN` to create Custom GPT OAuth clients, inspect clients grouped by name, update redirect URIs, and delete one or more selected clients. The UI stores the admin token in browser local storage only.
+Log in with `ACTIONS_ADMIN_TOKEN` to create Custom GPT OAuth clients, inspect clients grouped by name, update redirect URIs, and delete one or more selected clients. The UI stores the admin token in browser local storage only. Client secrets are shown only immediately after creating a client.
 
 You can also update the client with the HTTP API:
 

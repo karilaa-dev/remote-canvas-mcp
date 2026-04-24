@@ -116,6 +116,15 @@ test("admin can create a Custom GPT OAuth client", async () => {
 
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), {
+    chatgpt_setup: {
+      authentication_type: "OAuth",
+      authorization_url: "http://localhost/authorize",
+      openapi_schema_url: "http://localhost/actions/openapi.json",
+      privacy_policy_url: "http://localhost/privacy",
+      scope: "canvas.read",
+      token_exchange_method: "Default (POST request)",
+      token_url: "http://localhost/token",
+    },
     client_id: "created-client",
     client_name: "Canvas LMS Custom GPT",
     client_secret: "created-secret",
@@ -148,7 +157,10 @@ test("admin can create a Custom GPT OAuth client before ChatGPT provides a callb
   );
 
   assert.equal(response.status, 201);
-  assert.equal((await response.json() as { redirect_uris: string[] }).redirect_uris[0], "https://canvas-mcp.invalid/oauth/callback-placeholder");
+  const body = await response.json() as { chatgpt_setup: { authorization_url: string }; client_secret: string; redirect_uris: string[] };
+  assert.equal(body.redirect_uris[0], "https://canvas-mcp.invalid/oauth/callback-placeholder");
+  assert.equal(body.client_secret, "created-secret");
+  assert.equal(body.chatgpt_setup.authorization_url, "http://localhost/authorize");
 });
 
 test("admin can delete multiple clients", async () => {

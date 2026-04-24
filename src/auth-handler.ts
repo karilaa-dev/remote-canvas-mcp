@@ -376,9 +376,24 @@ function publicClientInfo(client: Awaited<ReturnType<OAuthHelpers["lookupClient"
   };
 }
 
-function clientCreationResponse(client: ClientInfo) {
+function getChatGptSetupInfo(origin: string, tokenEndpointAuthMethod?: string) {
+  return {
+    authentication_type: "OAuth",
+    authorization_url: `${origin}/authorize`,
+    openapi_schema_url: `${origin}/actions/openapi.json`,
+    privacy_policy_url: `${origin}/privacy`,
+    scope: "canvas.read",
+    token_exchange_method: tokenEndpointAuthMethod === "client_secret_basic"
+      ? "Basic authorization header"
+      : "Default (POST request)",
+    token_url: `${origin}/token`,
+  };
+}
+
+function clientCreationResponse(client: ClientInfo, origin: string) {
   return {
     ...publicClientInfo(client),
+    chatgpt_setup: getChatGptSetupInfo(origin, client.tokenEndpointAuthMethod),
     client_secret: client.clientSecret,
   };
 }
@@ -1181,7 +1196,7 @@ app.post("/admin/oauth-clients", async (c) => {
       tokenEndpointAuthMethod,
     });
 
-    return c.json(clientCreationResponse(client), 201);
+    return c.json(clientCreationResponse(client, new URL(c.req.url).origin), 201);
   } catch (error: unknown) {
     if (error instanceof OAuthError) return error.toResponse();
     return c.json({

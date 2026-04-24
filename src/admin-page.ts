@@ -50,6 +50,16 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .metric span{color:var(--muted);font-size:12px}
 .runtime{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .runtime code{display:block;background:#101311;border:1px solid var(--line);border-radius:6px;padding:9px 10px;overflow-wrap:anywhere}
+.setup{display:grid;gap:12px}
+.setup-step{display:grid;gap:10px;background:#101311;border:1px solid var(--line);border-radius:8px;padding:12px}
+.setup-step.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.setup-step h2{font-size:14px;line-height:1.25;margin:0;font-weight:700}
+.setup-step p{margin:0;color:var(--muted)}
+.copy-grid{display:grid;gap:8px}
+.copy-row{display:grid;grid-template-columns:170px 1fr auto;gap:8px;align-items:center}
+.copy-row span{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.07em}
+.copy-row code{background:#0d0f0e;border:1px solid var(--line);border-radius:6px;padding:9px 10px;overflow-wrap:anywhere;min-width:0}
+.copy-row .button{padding:9px 10px}
 .meta{display:grid;grid-template-columns:190px 1fr;gap:8px 12px;margin:0}
 .meta dt{color:var(--muted)}
 .meta dd{margin:0;overflow-wrap:anywhere}
@@ -64,7 +74,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .hidden{display:none!important}
 .empty{color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:6px}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-@media (max-width:900px){.shell{padding:18px}.grid,.split,.metrics{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.status{text-align:left}.meta{grid-template-columns:1fr}}
+@media (max-width:900px){.shell{padding:18px}.grid,.split,.metrics,.copy-row{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.status{text-align:left}.meta{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -116,10 +126,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
         <input id="newClientName" value="Canvas LMS Custom GPT">
       </div>
       <div class="section hidden" data-view="create">
-        <label for="newClientRedirect">Callback URL (optional)</label>
-        <textarea id="newClientRedirect" placeholder="Leave empty, or paste https://chat.openai.com/aip/g-.../oauth/callback"></textarea>
-      </div>
-      <div class="section hidden" data-view="create">
         <label for="newClientAuth">Token auth method</label>
         <select id="newClientAuth">
           <option value="client_secret_post">Default POST request</option>
@@ -130,6 +136,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
       <div class="section hidden" data-view="create">
         <button class="button primary" id="createClient">Create client</button>
         <div id="createdClient" class="secret-box hidden"></div>
+      </div>
+      <div class="section hidden" data-view="create">
+        <div id="clientSetup" class="setup hidden"></div>
       </div>
       <div class="section">
         <button class="button danger" id="logout">Logout</button>
@@ -439,13 +448,11 @@ async function updateRedirects() {
 }
 async function createClient() {
   const clientName = $("newClientName").value.trim() || "Canvas LMS Custom GPT";
-  const redirectUri = $("newClientRedirect").value.trim();
   setStatus("Creating client...");
   const body = {
     client_name: clientName,
     token_endpoint_auth_method: $("newClientAuth").value,
   };
-  if (redirectUri) body.redirect_uri = redirectUri;
   const created = await api("/admin/oauth-clients", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -457,6 +464,7 @@ async function createClient() {
   selected.add(created.client_id);
   renderClient(created);
   renderCreatedClient(created);
+  renderClientSetup(created);
   setStatus("Client created", "ok");
 }
 function renderCreatedClient(client) {
@@ -470,6 +478,90 @@ function renderCreatedClient(client) {
   const secret = document.createElement("code");
   secret.textContent = "Client Secret: " + (client.client_secret || "(public client; no secret)");
   box.append(title, id, secret);
+}
+function setupValueRows(items) {
+  const grid = document.createElement("div");
+  grid.className = "copy-grid";
+  for (const item of items) {
+    const row = document.createElement("div");
+    row.className = "copy-row";
+    const label = document.createElement("span");
+    label.textContent = item.label;
+    const code = document.createElement("code");
+    code.textContent = item.value || "";
+    const button = document.createElement("button");
+    button.className = "button";
+    button.type = "button";
+    button.textContent = "Copy";
+    button.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(item.value || "");
+      setStatus("Copied " + item.label, "ok");
+    });
+    row.append(label, code, button);
+    grid.appendChild(row);
+  }
+  return grid;
+}
+function renderClientSetup(client) {
+  const setup = client.chatgpt_setup || {
+    authentication_type: "OAuth",
+    authorization_url: location.origin + "/authorize",
+    openapi_schema_url: location.origin + "/actions/openapi.json",
+    privacy_policy_url: location.origin + "/privacy",
+    scope: "canvas.read",
+    token_exchange_method: $("newClientAuth").value === "client_secret_basic" ? "Basic authorization header" : "Default (POST request)",
+    token_url: location.origin + "/token",
+  };
+  const box = $("clientSetup");
+  box.classList.remove("hidden");
+  box.innerHTML = "";
+
+  const stepOne = document.createElement("section");
+  stepOne.className = "setup-step active";
+  const stepOneTitle = document.createElement("h2");
+  stepOneTitle.textContent = "Step 1: paste these values into ChatGPT";
+  const stepOneText = document.createElement("p");
+  stepOneText.textContent = "Use these fields in the Action authentication dialog. The client secret is shown only in this creation result.";
+  stepOne.append(
+    stepOneTitle,
+    stepOneText,
+    setupValueRows([
+      { label: "Schema URL", value: setup.openapi_schema_url },
+      { label: "Auth type", value: setup.authentication_type },
+      { label: "Client ID", value: client.client_id },
+      { label: "Client secret", value: client.client_secret || "" },
+      { label: "Authorization URL", value: setup.authorization_url },
+      { label: "Token URL", value: setup.token_url },
+      { label: "Scope", value: setup.scope },
+      { label: "Token exchange", value: setup.token_exchange_method },
+      { label: "Privacy URL", value: setup.privacy_policy_url },
+    ]),
+  );
+
+  const stepTwo = document.createElement("section");
+  stepTwo.className = "setup-step";
+  const stepTwoTitle = document.createElement("h2");
+  stepTwoTitle.textContent = "Step 2: save the callback URL ChatGPT gives you";
+  const stepTwoText = document.createElement("p");
+  stepTwoText.textContent = "After ChatGPT shows its callback URL, paste it here. The server stores both chat.openai.com and chatgpt.com variants for this client.";
+  const textarea = document.createElement("textarea");
+  textarea.id = "createdCallbackUrl";
+  textarea.placeholder = "https://chat.openai.com/aip/g-.../oauth/callback";
+  const save = document.createElement("button");
+  save.className = "button primary";
+  save.type = "button";
+  save.textContent = "Save callback URL to this client";
+  save.addEventListener("click", () => saveCreatedClientCallback(client.client_id, textarea.value).catch((error) => setStatus(error.message, "error")));
+  stepTwo.append(stepTwoTitle, stepTwoText, textarea, save);
+  box.append(stepOne, stepTwo);
+}
+async function saveCreatedClientCallback(clientId, redirectUri) {
+  if (!redirectUri.trim()) throw new Error("Paste the callback URL ChatGPT generated.");
+  selectedClientId = clientId;
+  newRedirect.value = redirectUri.trim();
+  await updateRedirects();
+  const callbackInput = $("createdCallbackUrl");
+  if (callbackInput) callbackInput.value = "";
 }
 async function deleteSelected() {
   const ids = Array.from(selected);
