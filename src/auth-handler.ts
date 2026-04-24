@@ -43,17 +43,23 @@ type OAuthEvent = {
   client_id?: string;
   code_has_colon?: boolean;
   code_length?: number;
+  code_challenge_method?: string;
   error?: string;
   error_description?: string;
   grant_type?: string | null;
+  has_code_challenge?: boolean;
   has_code_verifier?: boolean;
+  has_resource?: boolean;
   has_redirect_uri?: boolean;
   id?: string;
   message?: string;
-  phase: "authorize" | "token";
+  phase: "authorize_request" | "authorize" | "token";
+  request_query_keys?: string[];
   redirect_host?: string;
   redirect_path?: string;
   redirect_rewritten_from?: string;
+  response_type?: string;
+  scope?: string;
   status: number;
   state_length?: number;
   timestamp?: string;
@@ -155,6 +161,24 @@ function summarizeCallbackRedirect(redirectTo: string): Pick<
   } catch {
     return {};
   }
+}
+
+function summarizeAuthorizeRequest(request: Request, oauthReqInfo: AuthRequest): OAuthEvent {
+  const url = new URL(request.url);
+  return {
+    client_id: oauthReqInfo.clientId,
+    code_challenge_method: oauthReqInfo.codeChallengeMethod,
+    has_code_challenge: Boolean(oauthReqInfo.codeChallenge),
+    has_redirect_uri: Boolean(oauthReqInfo.redirectUri),
+    has_resource: Boolean(oauthReqInfo.resource),
+    phase: "authorize_request",
+    request_query_keys: Array.from(new Set(Array.from(url.searchParams.keys()))),
+    response_type: oauthReqInfo.responseType,
+    scope: oauthReqInfo.scope.join(" "),
+    state_length: oauthReqInfo.state.length,
+    status: 200,
+    ...summarizeRedirectUri(oauthReqInfo.redirectUri),
+  };
 }
 
 function preferChatGptCallbackHost(redirectTo: string): { redirectTo: string; rewrittenFrom?: string } {
@@ -686,6 +710,7 @@ app.get("/authorize", async (c) => {
     const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
     const { clientId } = oauthReqInfo;
     if (!clientId) return c.text("Invalid request: missing client_id", 400);
+    await recordOAuthEvent(c.env, summarizeAuthorizeRequest(c.req.raw, oauthReqInfo));
 
     const { token: csrfToken, setCookie } = generateCSRFProtection();
 
