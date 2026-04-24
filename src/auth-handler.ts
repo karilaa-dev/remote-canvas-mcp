@@ -31,6 +31,7 @@ type ClientDeleteBody = {
 };
 
 const PLACEHOLDER_REDIRECT_URI = "https://canvas-mcp.invalid/oauth/callback-placeholder";
+const AUTH_CODE_ALIAS_PREFIX = "oauth:auth-code-alias:";
 const AUTH_CODE_REDIRECT_PREFIX = "oauth:auth-code-redirect:";
 const OAUTH_EVENT_PREFIX = "oauth:event:";
 
@@ -98,6 +99,14 @@ function authCodeRedirectKey(code: string): string | null {
   const [userId, grantId] = code.split(":");
   if (!userId || !grantId) return null;
   return `${AUTH_CODE_REDIRECT_PREFIX}${userId}:${grantId}`;
+}
+
+function authCodeAliasKey(alias: string): string {
+  return `${AUTH_CODE_ALIAS_PREFIX}${alias}`;
+}
+
+function createAuthCodeAlias(): string {
+  return crypto.randomUUID().replaceAll("-", "");
 }
 
 function oauthEventKey(timestamp: string, id: string): string {
@@ -241,12 +250,17 @@ function parseClientIds(body: ClientDeleteBody): string[] {
 export async function tokenBodyWithStoredRedirectUri(bodyText: string, kv: KVNamespace): Promise<string> {
   const params = new URLSearchParams(bodyText);
   if (params.get("grant_type") !== "authorization_code") return bodyText;
-  if (params.get("redirect_uri")) return bodyText;
 
   const code = params.get("code");
   if (!code) return bodyText;
 
-  const key = authCodeRedirectKey(code);
+  const storedCode = await kv.get(authCodeAliasKey(code));
+  const providerCode = storedCode ?? code;
+  if (storedCode) params.set("code", storedCode);
+
+  if (params.get("redirect_uri")) return params.toString();
+
+  const key = authCodeRedirectKey(providerCode);
   if (!key) return bodyText;
 
   const redirectUri = await kv.get(key);
@@ -665,7 +679,7 @@ app.post("/authorize", async (c) => {
       c.env.COOKIE_ENCRYPTION_KEY,
     );
 
-    const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
+    let { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
       request: state.oauthReqInfo,
       userId,
       metadata: { label: `canvas-user-${userId.slice(0, 8)}` },
@@ -677,6 +691,13 @@ app.post("/authorize", async (c) => {
     const key = code ? authCodeRedirectKey(code) : null;
     if (key) {
       await c.env.OAUTH_KV.put(key, state.oauthReqInfo.redirectUri, { expirationTtl: 600 });
+    }
+    if (code) {
+      const alias = createAuthCodeAlias();
+      await c.env.OAUTH_KV.put(authCodeAliasKey(alias), code, { expirationTtl: 600 });
+      const redirectUrl = new URL(redirectTo);
+      redirectUrl.searchParams.set("code", alias);
+      redirectTo = redirectUrl.toString();
     }
 
     await recordOAuthEvent(c.env, {

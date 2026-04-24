@@ -207,6 +207,7 @@ test("token compatibility wrapper injects stored redirect_uri for non-PKCE clien
     }).toString(),
     {
       get: async (key: string) => {
+        if (key === "oauth:auth-code-alias:user-1:grant-1:secret") return null;
         assert.equal(key, "oauth:auth-code-redirect:user-1:grant-1");
         return "https://chat.openai.com/aip/g-test/oauth/callback";
       },
@@ -217,4 +218,26 @@ test("token compatibility wrapper injects stored redirect_uri for non-PKCE clien
     new URLSearchParams(body).get("redirect_uri"),
     "https://chat.openai.com/aip/g-test/oauth/callback",
   );
+});
+
+test("token compatibility wrapper translates authorization code aliases", async () => {
+  const body = await tokenBodyWithStoredRedirectUri(
+    new URLSearchParams({
+      client_id: "client-1",
+      client_secret: "secret",
+      code: "alias-code",
+      grant_type: "authorization_code",
+    }).toString(),
+    {
+      get: async (key: string) => {
+        if (key === "oauth:auth-code-alias:alias-code") return "user-1:grant-1:secret";
+        if (key === "oauth:auth-code-redirect:user-1:grant-1") return "https://chat.openai.com/aip/g-test/oauth/callback";
+        return null;
+      },
+    } as unknown as KVNamespace,
+  );
+
+  const params = new URLSearchParams(body);
+  assert.equal(params.get("code"), "user-1:grant-1:secret");
+  assert.equal(params.get("redirect_uri"), "https://chat.openai.com/aip/g-test/oauth/callback");
 });
