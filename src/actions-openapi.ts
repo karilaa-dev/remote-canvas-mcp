@@ -73,12 +73,7 @@ const jsonResponse = {
   description: "Canvas data returned as JSON.",
   content: {
     "application/json": {
-      schema: {
-        oneOf: [
-          { type: "object", additionalProperties: true },
-          { type: "array", items: { type: "object", additionalProperties: true } },
-        ],
-      },
+      schema: { $ref: "#/components/schemas/CanvasDataResponse" },
     },
   },
 };
@@ -214,6 +209,16 @@ export function getActionsOpenApiDocument(origin: string) {
         },
       },
       schemas: {
+        CanvasDataResponse: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            data: {
+              description: "Canvas LMS response data. The shape varies by endpoint and may be an object or array.",
+            },
+          },
+          required: ["data"],
+        },
         ErrorResponse: {
           type: "object",
           additionalProperties: false,

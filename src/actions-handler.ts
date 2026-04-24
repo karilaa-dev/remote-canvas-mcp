@@ -155,7 +155,8 @@ export async function handleCanvasActionsRequest(
     );
 
     const result = await route.handler(client, url, segments);
-    return jsonResponse(addLocalizedDateFields(result, createFormatter(props?.timezone ?? credentials.timezone)));
+    const data = addLocalizedDateFields(result, createFormatter(props?.timezone ?? credentials.timezone));
+    return jsonResponse({ data });
   } catch (error) {
     return errorToResponse(error);
   }

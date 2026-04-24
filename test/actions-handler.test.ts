@@ -54,16 +54,16 @@ async function requestAction(
 test("routes focused Actions API requests to the Canvas client", async () => {
   const response = await requestAction("/actions/api/courses/42/assignments?include_submissions=true");
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { courseId: 42, includeSubmissions: true });
+  assert.deepEqual(await response.json(), { data: { courseId: 42, includeSubmissions: true } });
 });
 
 test("adds localized companion fields to ISO date strings", async () => {
   const response = await requestAction("/actions/api/health");
   assert.equal(response.status, 200);
-  const body = await response.json() as Record<string, unknown>;
-  assert.equal(body.timestamp, "2026-04-24T10:00:00Z");
-  assert.equal(typeof body.timestamp_local, "string");
-  assert.match(String(body.timestamp_local), /2026/);
+  const body = await response.json() as { data: Record<string, unknown> };
+  assert.equal(body.data.timestamp, "2026-04-24T10:00:00Z");
+  assert.equal(typeof body.data.timestamp_local, "string");
+  assert.match(String(body.data.timestamp_local), /2026/);
 });
 
 test("returns 400 for invalid query parameters", async () => {
