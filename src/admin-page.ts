@@ -373,6 +373,7 @@ async function refreshEvents() {
       event.code_has_colon ? "code has colon" : "",
       typeof event.state_length === "number" ? "state_len=" + event.state_length : "",
       event.state_hash ? "state_hash=" + event.state_hash : "",
+      event.callback_state_hash ? "callback_state_hash=" + event.callback_state_hash : "",
       event.token_type ? "token_type=" + event.token_type : "",
     ].filter(Boolean).join(" | ");
     const error = document.createElement("span");
