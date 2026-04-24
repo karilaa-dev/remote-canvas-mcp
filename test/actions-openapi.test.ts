@@ -10,6 +10,7 @@ test("builds an importable GPT Actions OpenAPI document", () => {
     openapi: string;
     paths: Record<string, {
       get?: {
+        operationId?: string;
         responses?: {
           "200"?: {
             content?: {
@@ -29,6 +30,7 @@ test("builds an importable GPT Actions OpenAPI document", () => {
   assert.deepEqual(doc.servers, [{ url: "https://canvas-actions.example" }]);
   assert.ok(doc.paths["/actions/api/courses/{course_id}/assignments"]);
   assert.ok(doc.paths["/actions/api/courses/{course_id}/pages/{page_url}"]);
+  assert.equal(doc.paths["/actions/api/upcoming-assignments"].get?.operationId, "getUpcomingAssignments");
   assert.deepEqual(
     doc.paths["/actions/api/health"].get?.responses?.["200"]?.content?.["application/json"]?.schema,
     { $ref: "#/components/schemas/CanvasDataResponse" },
