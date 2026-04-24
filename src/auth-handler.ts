@@ -40,6 +40,7 @@ type OAuthEvent = {
   access_control_request_headers?: string;
   access_control_request_method?: string;
   auth_method?: string;
+  authorization_code?: string;
   body_keys?: string[];
   callback_query_keys?: string[];
   client_id?: string;
@@ -60,6 +61,7 @@ type OAuthEvent = {
   request_query_keys?: string[];
   redirect_host?: string;
   redirect_path?: string;
+  redirect_uri?: string;
   response_type?: string;
   scope?: string;
   status: number;
@@ -297,6 +299,16 @@ async function listOAuthEvents(kv: KVNamespace): Promise<OAuthEvent[]> {
   return events.filter((event): event is OAuthEvent => Boolean(event)).sort((a, b) =>
     (b.timestamp ?? "").localeCompare(a.timestamp ?? ""),
   );
+}
+
+async function getOAuthEvent(kv: KVNamespace, id: string): Promise<OAuthEvent | null> {
+  const events = await listOAuthEvents(kv);
+  return events.find((event) => event.id === id) ?? null;
+}
+
+function publicOAuthEvent(event: OAuthEvent): OAuthEvent {
+  const { authorization_code: _authorizationCode, redirect_uri: _redirectUri, ...publicEvent } = event;
+  return publicEvent;
 }
 
 async function clearOAuthEvents(kv: KVNamespace): Promise<number> {
@@ -839,12 +851,15 @@ app.post("/authorize", async (c) => {
     redirectTo = normalizeCallbackQueryOrder(redirectTo);
     const callbackState = new URL(redirectTo).searchParams.get("state");
     const callbackSummary = summarizeCallbackRedirect(redirectTo);
+    const callbackUrl = new URL(redirectTo);
 
     await recordOAuthEvent(c.env, {
+      authorization_code: callbackUrl.searchParams.get("code") ?? undefined,
       client_id: state.oauthReqInfo.clientId,
       callback_state_hash: callbackState ? await hashDiagnosticValue(callbackState) : undefined,
       completion_mode: "redirect",
       phase: "authorize",
+      redirect_uri: state.oauthReqInfo.redirectUri,
       state_hash: await hashDiagnosticValue(state.oauthReqInfo.state),
       status: 302,
       ...callbackSummary,
@@ -903,6 +918,84 @@ async function handleTokenPreflight(c: Context<HonoEnv>): Promise<Response> {
     headers: addTokenCorsHeaders(new Headers(), c.req.raw),
     status: 204,
   });
+}
+
+function redactedTokenBody(text: string): unknown {
+  try {
+    const json = JSON.parse(text) as Record<string, unknown>;
+    for (const key of ["access_token", "refresh_token", "id_token"]) {
+      if (typeof json[key] === "string") json[key] = "[redacted]";
+    }
+    return json;
+  } catch {
+    return text;
+  }
+}
+
+async function exchangeAuthorizationCodeForDiagnostics(c: Context<HonoEnv>, event: OAuthEvent): Promise<Response> {
+  if (!event.authorization_code || !event.client_id) {
+    return c.json({
+      error: "invalid_request",
+      message: "Selected OAuth event does not include an exchangeable authorization code.",
+      status: 400,
+    }, 400);
+  }
+
+  const client = await c.env.OAUTH_PROVIDER.lookupClient(event.client_id);
+  if (!client) {
+    return c.json({ error: "not_found", message: "OAuth client was not found.", status: 404 }, 404);
+  }
+
+  const tokenAuthMethod = client.tokenEndpointAuthMethod ?? "client_secret_post";
+  const params = new URLSearchParams({
+    client_id: event.client_id,
+    code: event.authorization_code,
+    grant_type: "authorization_code",
+  });
+  if (event.redirect_uri) params.set("redirect_uri", event.redirect_uri);
+
+  const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded" });
+  if (tokenAuthMethod === "client_secret_basic" && client.clientSecret) {
+    headers.set(
+      "Authorization",
+      `Basic ${btoa(`${encodeURIComponent(event.client_id)}:${encodeURIComponent(client.clientSecret)}`)}`,
+    );
+  } else if (tokenAuthMethod !== "none" && client.clientSecret) {
+    params.set("client_secret", client.clientSecret);
+  }
+
+  const body = await tokenBodyWithStoredRedirectUri(params.toString(), c.env.OAUTH_KV);
+  const url = new URL(c.req.url);
+  url.pathname = INTERNAL_TOKEN_ENDPOINT;
+
+  const tokenRequest = new Request(url.toString(), {
+    body,
+    headers,
+    method: "POST",
+  });
+  const requestSummary = summarizeTokenRequest(body, tokenRequest);
+  const provider = await getTokenEndpointProvider();
+  const response = await provider.fetch(tokenRequest, c.env, c.executionCtx);
+  const text = await response.text();
+  const redactedBody = redactedTokenBody(text);
+  const tokenJson = typeof redactedBody === "object" && redactedBody !== null ? redactedBody as Record<string, unknown> : null;
+
+  await recordOAuthEvent(c.env, {
+    ...requestSummary,
+    auth_method: `admin_self_test:${requestSummary.auth_method}`,
+    error: typeof tokenJson?.error === "string" ? tokenJson.error : undefined,
+    error_description: typeof tokenJson?.error_description === "string" ? tokenJson.error_description : undefined,
+    message: "Admin OAuth code self-test exchange.",
+    status: response.status,
+    token_type: typeof tokenJson?.token_type === "string" ? tokenJson.token_type : undefined,
+  });
+
+  return c.json({
+    consumed_code: true,
+    message: "This diagnostic exchange consumes the authorization code. Run the ChatGPT sign-in flow again after testing.",
+    response: redactedBody,
+    status: response.status,
+  }, response.ok ? 200 : 400);
 }
 
 app.options("/token", handleTokenPreflight);
@@ -979,7 +1072,7 @@ app.get("/admin/oauth-events", async (c) => {
     return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
   }
 
-  return c.json({ events: await listOAuthEvents(c.env.OAUTH_KV) });
+  return c.json({ events: (await listOAuthEvents(c.env.OAUTH_KV)).map(publicOAuthEvent) });
 });
 
 app.post("/admin/oauth-events/clear", async (c) => {
@@ -988,6 +1081,19 @@ app.post("/admin/oauth-events/clear", async (c) => {
   }
 
   return c.json({ deleted: await clearOAuthEvents(c.env.OAUTH_KV) });
+});
+
+app.post("/admin/oauth-events/:event_id/exchange-code", async (c) => {
+  if (!isAdminAuthorized(c.req.raw, c.env)) {
+    return c.json({ error: "unauthorized", message: "Missing or invalid admin token.", status: 401 }, 401);
+  }
+
+  const event = await getOAuthEvent(c.env.OAUTH_KV, c.req.param("event_id"));
+  if (!event) {
+    return c.json({ error: "not_found", message: "OAuth event was not found.", status: 404 }, 404);
+  }
+
+  return exchangeAuthorizationCodeForDiagnostics(c, event);
 });
 
 app.get("/admin/runtime", async (c) => {

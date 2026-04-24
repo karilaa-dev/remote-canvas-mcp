@@ -380,8 +380,26 @@ async function refreshEvents() {
     error.textContent = event.error || event.error_description || event.message || "";
     row.append(title, details);
     if (error.textContent) row.appendChild(error);
+    if (event.phase === "authorize" && event.id) {
+      const actions = document.createElement("div");
+      actions.className = "row";
+      const exchangeButton = document.createElement("button");
+      exchangeButton.className = "button";
+      exchangeButton.textContent = "Self-test token exchange";
+      exchangeButton.addEventListener("click", () => selfTestExchange(event.id));
+      actions.appendChild(exchangeButton);
+      row.appendChild(actions);
+    }
     box.appendChild(row);
   }
+}
+async function selfTestExchange(eventId) {
+  if (!confirm("This consumes the authorization code from this failed login. Continue?")) return;
+  setStatus("Testing token exchange...");
+  const result = await api("/admin/oauth-events/" + encodeURIComponent(eventId) + "/exchange-code", { method: "POST" });
+  await refreshEvents();
+  setStatus("Token exchange self-test: HTTP " + result.status, result.status >= 200 && result.status < 300 ? "ok" : "error");
+  alert(JSON.stringify(result, null, 2));
 }
 async function clearEvents() {
   if (!confirm("Clear all OAuth diagnostic events?")) return;
