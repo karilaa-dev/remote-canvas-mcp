@@ -57,10 +57,10 @@ type OAuthEvent = {
   request_query_keys?: string[];
   redirect_host?: string;
   redirect_path?: string;
-  redirect_rewritten_from?: string;
   response_type?: string;
   scope?: string;
   status: number;
+  state_hash?: string;
   state_length?: number;
   timestamp?: string;
   token_type?: string;
@@ -163,7 +163,15 @@ function summarizeCallbackRedirect(redirectTo: string): Pick<
   }
 }
 
-function summarizeAuthorizeRequest(request: Request, oauthReqInfo: AuthRequest): OAuthEvent {
+async function hashDiagnosticValue(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest))
+    .slice(0, 8)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function summarizeAuthorizeRequest(request: Request, oauthReqInfo: AuthRequest): Promise<OAuthEvent> {
   const url = new URL(request.url);
   return {
     client_id: oauthReqInfo.clientId,
@@ -175,26 +183,11 @@ function summarizeAuthorizeRequest(request: Request, oauthReqInfo: AuthRequest):
     request_query_keys: Array.from(new Set(Array.from(url.searchParams.keys()))),
     response_type: oauthReqInfo.responseType,
     scope: oauthReqInfo.scope.join(" "),
+    state_hash: await hashDiagnosticValue(oauthReqInfo.state),
     state_length: oauthReqInfo.state.length,
     status: 200,
     ...summarizeRedirectUri(oauthReqInfo.redirectUri),
   };
-}
-
-function preferChatGptCallbackHost(redirectTo: string): { redirectTo: string; rewrittenFrom?: string } {
-  try {
-    const url = new URL(redirectTo);
-    const isChatGptCallback = url.hostname === "chat.openai.com"
-      && url.pathname.startsWith("/aip/")
-      && url.pathname.endsWith("/oauth/callback");
-    if (!isChatGptCallback) return { redirectTo };
-
-    const rewrittenFrom = url.host;
-    url.hostname = "chatgpt.com";
-    return { redirectTo: url.toString(), rewrittenFrom };
-  } catch {
-    return { redirectTo };
-  }
 }
 
 function parseBasicClientId(authHeader: string | null): string | undefined {
@@ -710,7 +703,7 @@ app.get("/authorize", async (c) => {
     const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
     const { clientId } = oauthReqInfo;
     if (!clientId) return c.text("Invalid request: missing client_id", 400);
-    await recordOAuthEvent(c.env, summarizeAuthorizeRequest(c.req.raw, oauthReqInfo));
+    await recordOAuthEvent(c.env, await summarizeAuthorizeRequest(c.req.raw, oauthReqInfo));
 
     const { token: csrfToken, setCookie } = generateCSRFProtection();
 
@@ -783,15 +776,14 @@ app.post("/authorize", async (c) => {
       redirectUrl.searchParams.set("code", alias);
       redirectTo = redirectUrl.toString();
     }
-    const preferredCallback = preferChatGptCallbackHost(redirectTo);
-    redirectTo = preferredCallback.redirectTo;
+    const callbackSummary = summarizeCallbackRedirect(redirectTo);
 
     await recordOAuthEvent(c.env, {
       client_id: state.oauthReqInfo.clientId,
       phase: "authorize",
-      redirect_rewritten_from: preferredCallback.rewrittenFrom,
+      state_hash: await hashDiagnosticValue(state.oauthReqInfo.state),
       status: 303,
-      ...summarizeCallbackRedirect(redirectTo),
+      ...callbackSummary,
     });
 
     const headers = new Headers({ Location: redirectTo });

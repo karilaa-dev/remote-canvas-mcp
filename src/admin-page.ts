@@ -361,11 +361,11 @@ async function refreshEvents() {
       event.request_query_keys ? "request_query=" + event.request_query_keys.join(",") : "",
       event.has_code_verifier ? "has code_verifier" : "",
       event.redirect_host ? "redirect=" + event.redirect_host + event.redirect_path : "",
-      event.redirect_rewritten_from ? "rewritten_from=" + event.redirect_rewritten_from : "",
       event.callback_query_keys ? "query=" + event.callback_query_keys.join(",") : "",
       typeof event.code_length === "number" ? "code_len=" + event.code_length : "",
       event.code_has_colon ? "code has colon" : "",
       typeof event.state_length === "number" ? "state_len=" + event.state_length : "",
+      event.state_hash ? "state_hash=" + event.state_hash : "",
       event.token_type ? "token_type=" + event.token_type : "",
     ].filter(Boolean).join(" | ");
     const error = document.createElement("span");
