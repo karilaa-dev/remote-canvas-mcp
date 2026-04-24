@@ -1,0 +1,3174 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Direct Canvas LMS API",
+    "description": "Read-only direct Canvas LMS REST API schema for a private Custom GPT using API key Bearer authentication.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://bc.instructure.com"
+    }
+  ],
+  "security": [
+    {
+      "canvasBearer": []
+    }
+  ],
+  "paths": {
+    "/api/v1/users/self/profile": {
+      "get": {
+        "operationId": "getCanvasUserProfile",
+        "summary": "Get Canvas user profile",
+        "description": "Get the current user's Canvas profile. This also verifies that the Canvas API token can reach Canvas.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses": {
+      "get": {
+        "operationId": "listCourses",
+        "summary": "List courses",
+        "description": "List Canvas courses for the current user. The default state filter mirrors the project's active/completed course lookup.",
+        "parameters": [
+          {
+            "name": "state[]",
+            "in": "query",
+            "description": "Canvas course states to include. Omit this parameter only when you intentionally want Canvas defaults.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "completed",
+                  "unpublished",
+                  "deleted"
+                ]
+              },
+              "default": [
+                "available",
+                "completed"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas course include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "total_students",
+                  "teachers",
+                  "term",
+                  "course_progress",
+                  "sections",
+                  "syllabus_body"
+                ]
+              },
+              "default": [
+                "total_students",
+                "teachers",
+                "term",
+                "course_progress"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}": {
+      "get": {
+        "operationId": "getCourse",
+        "summary": "Get course",
+        "description": "Get details for one Canvas course. Include syllabus_body when you want the course syllabus.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas course include fields. The project uses syllabus_body for the syllabus helper.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "total_students",
+                  "teachers",
+                  "term",
+                  "course_progress",
+                  "sections",
+                  "syllabus_body"
+                ]
+              },
+              "default": [
+                "total_students",
+                "teachers",
+                "term",
+                "course_progress",
+                "sections",
+                "syllabus_body"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/assignments": {
+      "get": {
+        "operationId": "listAssignments",
+        "summary": "List assignments",
+        "description": "List assignments for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas assignment include fields. Add submission to include the current user's submission data.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "assignment_group",
+                  "rubric",
+                  "due_at",
+                  "submission"
+                ]
+              },
+              "default": [
+                "assignment_group",
+                "rubric",
+                "due_at"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/assignments/{assignment_id}": {
+      "get": {
+        "operationId": "getAssignment",
+        "summary": "Get assignment",
+        "description": "Get details for one Canvas assignment.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas assignment ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas assignment include fields. Add submission to include the current user's submission data.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "assignment_group",
+                  "rubric",
+                  "submission"
+                ]
+              },
+              "default": [
+                "assignment_group",
+                "rubric"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/assignment_groups": {
+      "get": {
+        "operationId": "listAssignmentGroups",
+        "summary": "List assignment groups",
+        "description": "List assignment groups for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas assignment group include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "assignments"
+                ]
+              },
+              "default": [
+                "assignments"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}": {
+      "get": {
+        "operationId": "getSubmission",
+        "summary": "Get assignment submission",
+        "description": "Get submission details for one assignment. Use user_id self for the current user.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas assignment ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas user ID, or use \"self\" for the current user.",
+            "schema": {
+              "type": "string",
+              "default": "self"
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas submission include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "submission_comments",
+                  "rubric_assessment",
+                  "assignment"
+                ]
+              },
+              "default": [
+                "submission_comments",
+                "rubric_assessment",
+                "assignment"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/files": {
+      "get": {
+        "operationId": "listCourseFiles",
+        "summary": "List course files",
+        "description": "List files for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/folders/{folder_id}/files": {
+      "get": {
+        "operationId": "listFolderFiles",
+        "summary": "List folder files",
+        "description": "List files in one Canvas folder. This covers the project's folder-backed file listing mode.",
+        "parameters": [
+          {
+            "name": "folder_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas folder ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/files/{file_id}": {
+      "get": {
+        "operationId": "getFile",
+        "summary": "Get file",
+        "description": "Get information about one Canvas file.",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas file ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/folders": {
+      "get": {
+        "operationId": "listFolders",
+        "summary": "List course folders",
+        "description": "List folders for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/pages": {
+      "get": {
+        "operationId": "listPages",
+        "summary": "List pages",
+        "description": "List wiki pages for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/pages/{page_url}": {
+      "get": {
+        "operationId": "getPage",
+        "summary": "Get page",
+        "description": "Get one Canvas course page by its page URL slug.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_url",
+            "in": "path",
+            "required": true,
+            "description": "Canvas page URL slug.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/calendar_events": {
+      "get": {
+        "operationId": "listCalendarEvents",
+        "summary": "List calendar events",
+        "description": "List Canvas calendar events.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Canvas calendar event type. The project uses event.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "event",
+                "assignment"
+              ],
+              "default": "event"
+            }
+          },
+          {
+            "name": "all_events",
+            "in": "query",
+            "description": "When true, include all visible events.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Start date in ISO 8601 format.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "End date in ISO 8601 format.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/users/self/upcoming_events": {
+      "get": {
+        "operationId": "getUpcomingAssignments",
+        "summary": "Get upcoming assignments",
+        "description": "Get upcoming Canvas events. The project filters this response to assignment events; use it for upcoming assignment due dates.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of upcoming events to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/users/self/dashboard": {
+      "get": {
+        "operationId": "getDashboard",
+        "summary": "Get dashboard",
+        "description": "Get the current user's Canvas dashboard.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/dashboard/dashboard_cards": {
+      "get": {
+        "operationId": "getDashboardCards",
+        "summary": "Get dashboard cards",
+        "description": "Get Canvas dashboard cards for active courses.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/conversations": {
+      "get": {
+        "operationId": "listConversations",
+        "summary": "List conversations",
+        "description": "List the current user's Canvas conversations.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/conversations/{conversation_id}": {
+      "get": {
+        "operationId": "getConversation",
+        "summary": "Get conversation",
+        "description": "Get details for one Canvas conversation.",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas conversation ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/users/self/activity_stream": {
+      "get": {
+        "operationId": "listNotifications",
+        "summary": "List notifications",
+        "description": "List the current user's Canvas activity stream notifications.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/enrollments": {
+      "get": {
+        "operationId": "getCourseGrades",
+        "summary": "Get course grades",
+        "description": "Get enrollment and grade data for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas enrollment include fields used for grade lookup.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "grades",
+                  "observed_users"
+                ]
+              },
+              "default": [
+                "grades",
+                "observed_users"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/modules": {
+      "get": {
+        "operationId": "listModules",
+        "summary": "List modules",
+        "description": "List modules for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas module include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "items"
+                ]
+              },
+              "default": [
+                "items"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/modules/{module_id}": {
+      "get": {
+        "operationId": "getModule",
+        "summary": "Get module",
+        "description": "Get details for one Canvas module.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas module ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas module include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "items"
+                ]
+              },
+              "default": [
+                "items"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/modules/{module_id}/items": {
+      "get": {
+        "operationId": "listModuleItems",
+        "summary": "List module items",
+        "description": "List items inside one Canvas module.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas module ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas module item include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "content_details"
+                ]
+              },
+              "default": [
+                "content_details"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}": {
+      "get": {
+        "operationId": "getModuleItem",
+        "summary": "Get module item",
+        "description": "Get details for one Canvas module item.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "module_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas module ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas module item ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas module item include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "content_details"
+                ]
+              },
+              "default": [
+                "content_details"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/discussion_topics": {
+      "get": {
+        "operationId": "listDiscussionTopics",
+        "summary": "List discussion topics or announcements",
+        "description": "List discussion topics for one Canvas course. Set type to announcement to list announcements, matching the project's announcements helper.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Optional Canvas discussion topic type filter.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "announcement"
+              ]
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas discussion include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "assignment"
+                ]
+              },
+              "default": [
+                "assignment"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/discussion_topics/{topic_id}": {
+      "get": {
+        "operationId": "getDiscussionTopic",
+        "summary": "Get discussion topic",
+        "description": "Get details for one Canvas discussion topic.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "topic_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas discussion topic ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "include[]",
+            "in": "query",
+            "description": "Canvas discussion include fields used by the project.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "assignment"
+                ]
+              },
+              "default": [
+                "assignment"
+              ]
+            },
+            "style": "form",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/quizzes": {
+      "get": {
+        "operationId": "listQuizzes",
+        "summary": "List quizzes",
+        "description": "List quizzes for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/quizzes/{quiz_id}": {
+      "get": {
+        "operationId": "getQuiz",
+        "summary": "Get quiz",
+        "description": "Get details for one Canvas quiz.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "quiz_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas quiz ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    },
+    "/api/v1/courses/{course_id}/rubrics": {
+      "get": {
+        "operationId": "listRubrics",
+        "summary": "List rubrics",
+        "description": "List rubrics for one Canvas course.",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "description": "Canvas course ID.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canvas API JSON response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Canvas API error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasError"
+                }
+              }
+            }
+          }
+        },
+        "x-openai-isConsequential": false
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "canvasBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Canvas API token",
+        "description": "Paste your Canvas access token into GPT Action API key Bearer authentication."
+      }
+    },
+    "schemas": {
+      "CanvasData": {
+        "description": "Canvas LMS response data. The shape varies by endpoint and may be an object or array."
+      },
+      "CanvasError": {
+        "description": "Canvas LMS error response. Canvas error shapes vary by endpoint and institution."
+      }
+    }
+  }
+}

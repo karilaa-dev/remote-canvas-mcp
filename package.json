@@ -8,6 +8,7 @@
     "cf-typegen": "wrangler types",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
+    "generate:direct-openapi": "node --import tsx scripts/generate-direct-canvas-openapi.ts",
     "sync": "tsx scripts/sync-upstream.ts"
   },
   "dependencies": {
