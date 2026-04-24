@@ -29,22 +29,27 @@ function parseEncodedState(encoded: string): { oauthReqInfo?: AuthRequest } | nu
 }
 
 app.get("/authorize", async (c) => {
-  const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
-  const { clientId } = oauthReqInfo;
-  if (!clientId) return c.text("Invalid request", 400);
+  try {
+    const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
+    const { clientId } = oauthReqInfo;
+    if (!clientId) return c.text("Invalid request: missing client_id", 400);
 
-  const { token: csrfToken, setCookie } = generateCSRFProtection();
+    const { token: csrfToken, setCookie } = generateCSRFProtection();
 
-  return renderApprovalDialog(c.req.raw, {
-    client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
-    csrfToken,
-    server: {
-      name: "Canvas LMS Connector",
-      description: "Provides read-only Canvas LMS access for AI assistants. Enter your Canvas credentials to authorize access.",
-    },
-    setCookie,
-    state: { oauthReqInfo },
-  });
+    return renderApprovalDialog(c.req.raw, {
+      client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
+      csrfToken,
+      server: {
+        name: "Canvas LMS Connector",
+        description: "Provides read-only Canvas LMS access for AI assistants. Enter your Canvas credentials to authorize access.",
+      },
+      setCookie,
+      state: { oauthReqInfo },
+    });
+  } catch (error: unknown) {
+    if (error instanceof OAuthError) return error.toResponse();
+    return c.text(`OAuth authorization request error: ${error instanceof Error ? error.message : String(error)}`, 400);
+  }
 });
 
 app.post("/authorize", async (c) => {
